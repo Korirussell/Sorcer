@@ -21,7 +21,7 @@ class EcoOrchestrator:
     async def process(self, req):
         # Bypass: direct LLM, no eco logic
         if getattr(req, "bypass_eco", False):
-            raw = await self.client.raw_llm_generate(req.prompt, "gemini-1.5-flash")
+            raw = await self.client.raw_llm_generate(req.prompt, "gemini-2.0-flash")
             return {
                 "status": "complete",
                 "response": raw,
@@ -42,9 +42,9 @@ class EcoOrchestrator:
         # 1: Compress
         comp = self.compressor.compress(req.prompt)
 
-        # 2: Triage
+        # 2: Triage (temporary: force cheapest model for testing)
         triage = self.scorer.score(comp["compressed_text"])
-        tier = triage["tier"]
+        tier = "gemini-2.0-flash"  # cheapest (new API); revert to triage["tier"] for production
 
         # 3: Grid + optional deferral (non-fatal: if DB unavailable, run immediately)
         grid_intensity = 100.0  # Placeholder – below threshold so we run now until real grid infra

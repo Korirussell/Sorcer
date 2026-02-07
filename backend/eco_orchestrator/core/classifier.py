@@ -40,7 +40,7 @@ class ComplexityScorer:
         Returns a score from 0.0 (Easy/Flash) to 10.0 (Hard/Pro).
         Threshold for 'Pro' is usually > 4.5
         """
-        if not text: return {"total_score": 0.0, "tier": "flash"}
+        if not text: return {"total_score": 0.0, "tier": "gemini-2.0-flash"}
 
         raw_score = 0.0
         
@@ -71,7 +71,7 @@ class ComplexityScorer:
             "total_score": final_score,
             "lexical_density": round(density, 2),
             "avg_sentence_length": round(avg_len, 2),
-            "tier": "gemini-1.5-pro" if final_score > 4.5 else "gemini-1.5-flash"
+            "tier": "gemini-2.0-flash"  # cheapest; use gemini-2.0-pro for hard prompts when needed
         }
 
 # Logic for your endpoint
