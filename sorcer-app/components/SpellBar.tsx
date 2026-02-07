@@ -1,0 +1,197 @@
+"use client";
+
+import { useState } from "react";
+import { Send, Leaf, Zap, Flame, Sprout, ChevronDown } from "lucide-react";
+import { useEnergy } from "@/context/EnergyContext";
+
+function setCookie(name: string, value: string) {
+  const maxAge = 60 * 60 * 24 * 365;
+  // biome-ignore lint/suspicious/noDocumentCookie: needed for client-side cookie setting
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}`;
+}
+
+export function SpellBar({
+  input,
+  setInput,
+  onSubmit,
+  status,
+}: {
+  input: string;
+  setInput: (value: string) => void;
+  onSubmit: () => void;
+  status: "ready" | "submitted" | "streaming" | "error";
+}) {
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const { mode, selectedModelId, setMode, setSelectedModelId } = useEnergy();
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (input.trim() && status === "ready") {
+      onSubmit();
+    }
+  };
+
+  const models = [
+    { id: "google/gemini-2.5-flash-lite", name: "Eco", icon: Leaf, description: "98% Clean Energy", color: "text-moss" },
+    { id: "anthropic/claude-haiku-4.5", name: "Balanced", icon: Zap, description: "Fast / Low Carbon", color: "text-topaz" },
+    { id: "openai/gpt-5.2", name: "Power", icon: Flame, description: "High Performance", color: "text-witchberry" },
+  ];
+
+  const selectedModel = selectedModelId ? models.find((m) => m.id === selectedModelId) : null;
+
+  const handleModelChange = (modelId: string) => {
+    setSelectedModelId(modelId);
+    setCookie("chat-model", modelId);
+    setIsDropdownOpen(false);
+  };
+
+  const switchToManual = () => {
+    setMode("manual");
+    if (!selectedModelId) setSelectedModelId(models[0].id);
+    setIsDropdownOpen(false);
+  };
+
+  const switchToAuto = () => {
+    setMode("auto");
+    setSelectedModelId(null);
+    setIsDropdownOpen(false);
+  };
+
+  const isLoading = status === "submitted" || status === "streaming";
+
+  return (
+    <div className="mx-auto max-w-2xl w-full">
+      <form onSubmit={handleSubmit} className="specimen-card">
+        {/* Input row */}
+        <div className="flex items-center gap-3 p-3">
+          {/* Model selector pill */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              className={`
+                flex items-center gap-1.5 pl-3 pr-2 py-2 rounded-xl text-xs font-medium
+                transition-all duration-200 border whitespace-nowrap
+                ${mode === "auto"
+                  ? "bg-moss/10 border-moss/20 text-moss hover:bg-moss/15"
+                  : "bg-parchment-dark border-oak/10 text-oak hover:border-oak/20"
+                }
+              `}
+            >
+              {mode === "auto" ? (
+                <>
+                  <Sprout className="w-3.5 h-3.5" />
+                  <span>Auto</span>
+                </>
+              ) : (
+                <>
+                  {selectedModel && <selectedModel.icon className={`w-3.5 h-3.5 ${selectedModel.color}`} />}
+                  <span>{selectedModel?.name || "Select"}</span>
+                </>
+              )}
+              <ChevronDown className={`w-3 h-3 opacity-50 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {/* Dropdown */}
+            {isDropdownOpen && (
+              <div className="absolute bottom-full left-0 mb-2 w-64 glass-panel rounded-2xl shadow-specimen-hover z-50 overflow-hidden animate-page-turn">
+                <div className="p-2">
+                  {/* Auto option */}
+                  <button
+                    type="button"
+                    onClick={switchToAuto}
+                    className={`
+                      w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-200
+                      ${mode === "auto" ? "bg-moss/10 border border-moss/20" : "hover:bg-oak/5"}
+                    `}
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-moss/15 flex items-center justify-center">
+                      <Sprout className="w-4 h-4 text-moss" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-oak">Auto Sustainable</div>
+                      <div className="text-[11px] text-oak-light/50">Oracle selects cleanest model</div>
+                    </div>
+                    {mode === "auto" && <div className="w-2 h-2 rounded-full bg-moss" />}
+                  </button>
+
+                  <div className="my-1.5 mx-3 border-t border-oak/8" />
+                  <div className="px-3 py-1 text-[10px] font-medium text-oak/30 uppercase tracking-wider">Manual</div>
+
+                  {/* Model options */}
+                  {models.map((model) => {
+                    const isSelected = mode === "manual" && model.id === selectedModelId;
+                    return (
+                      <button
+                        type="button"
+                        key={model.id}
+                        onClick={() => {
+                          if (mode !== "manual") switchToManual();
+                          handleModelChange(model.id);
+                        }}
+                        className={`
+                          w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-200
+                          ${isSelected ? "bg-oak/5 border border-oak/10" : "hover:bg-oak/5"}
+                        `}
+                      >
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isSelected ? "bg-oak/10" : "bg-oak/5"}`}>
+                          <model.icon className={`w-4 h-4 ${model.color}`} />
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-oak">{model.name}</div>
+                          <div className="text-[11px] text-oak-light/50">{model.description}</div>
+                        </div>
+                        {isSelected && <div className={`w-2 h-2 rounded-full ${model.color.replace("text-", "bg-")}`} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Text input */}
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask the Oracle..."
+            disabled={isLoading}
+            className="flex-1 px-3 py-2.5 bg-transparent text-oak placeholder:text-oak/30 focus:outline-none text-sm"
+          />
+
+          {/* Submit — Magic Orb mini */}
+          <button
+            type="submit"
+            disabled={!input.trim() || status !== "ready"}
+            className={`
+              w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200
+              ${input.trim() && status === "ready"
+                ? "bg-moss text-parchment shadow-sm hover:shadow-md active:scale-95"
+                : "bg-oak/5 text-oak/20 cursor-not-allowed"
+              }
+            `}
+          >
+            {isLoading ? (
+              <div className="w-4 h-4 border-2 border-parchment/30 border-t-parchment rounded-full animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+
+        {/* Status bar */}
+        {status === "error" && (
+          <div className="px-4 pb-3 -mt-1">
+            <p className="text-xs text-witchberry">Something went wrong. Please try again.</p>
+          </div>
+        )}
+      </form>
+
+      {/* Close dropdown on outside click */}
+      {isDropdownOpen && (
+        <div className="fixed inset-0 z-40" onClick={() => setIsDropdownOpen(false)} />
+      )}
+    </div>
+  );
+}

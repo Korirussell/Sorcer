@@ -1,0 +1,20 @@
+### 🧠 Your New "Oracle" Algorithm (For the Backend Guy)
+Since you want a "plethora of variables," here is the Python logic your backend guy needs to implement (or mock) for the **Oracle**:
+
+```python
+def calculate_carbon_score(model):
+    # 1. Grid Intensity (gCO2/kWh)
+    # Get real-time data from WattTime for the model's region
+    grid_intensity = get_grid_data(model.region) 
+
+    # 2. Cooling Factor (PUE Adjustment)
+    # Get temp at data center. If > 85F, add 30% energy penalty.
+    temp = get_weather(model.region)
+    cooling_penalty = 1.3 if temp > 85 else 1.0
+
+    # 3. Model Efficiency (kwh/token)
+    # Hardcoded estimates based on parameter count
+    base_energy = model.energy_per_token 
+
+    # The Formula
+    return grid_intensity * base_energy * cooling_penalty

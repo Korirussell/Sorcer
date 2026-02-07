@@ -1,0 +1,492 @@
+@import "tailwindcss";
+@import "katex/dist/katex.min.css";
+
+/* include utility classes in streamdown */
+@source "../node_modules/streamdown/dist/index.js";
+
+/* custom variant for setting dark mode programmatically */
+@custom-variant dark (&:is(.dark, .dark *));
+
+/* include plugins */
+@plugin "tailwindcss-animate";
+@plugin "@tailwindcss/typography";
+
+/* ═══════════════════════════════════════════════════════
+   BOTANICAL JOURNAL — Design Tokens
+   ═══════════════════════════════════════════════════════ */
+:root {
+  /* ── Core palette ── */
+  --parchment: #F7F3E8;
+  --parchment-dark: #EDE8D6;
+  --oak: #6B3710;
+  --oak-light: #8B5E3C;
+  --moss: #4B6A4C;
+  --moss-light: #5E8260;
+  --sage: #A0A088;
+  --witchberry: #B52121;
+  --topaz: #DDA059;
+  --miami: #59C9F1;
+
+  /* ── Mapped to shadcn/ui tokens ── */
+  --background: #F7F3E8;
+  --foreground: #6B3710;
+  --card: #F7F3E8;
+  --card-foreground: #6B3710;
+  --popover: #F7F3E8;
+  --popover-foreground: #6B3710;
+  --primary: #4B6A4C;
+  --primary-foreground: #F7F3E8;
+  --secondary: #EDE8D6;
+  --secondary-foreground: #6B3710;
+  --muted: #EDE8D6;
+  --muted-foreground: #8B5E3C;
+  --accent: #DDA059;
+  --accent-foreground: #6B3710;
+  --destructive: #B52121;
+  --destructive-foreground: #F7F3E8;
+  --border: #6B371020;
+  --input: #6B371015;
+  --ring: #4B6A4C;
+  --chart-1: #4B6A4C;
+  --chart-2: #DDA059;
+  --chart-3: #59C9F1;
+  --chart-4: #A0A088;
+  --chart-5: #B52121;
+  --sidebar-background: #F7F3E8;
+  --sidebar-foreground: #6B3710;
+  --sidebar-primary: #4B6A4C;
+  --sidebar-primary-foreground: #F7F3E8;
+  --sidebar-accent: #EDE8D6;
+  --sidebar-accent-foreground: #6B3710;
+  --sidebar-border: #6B371015;
+  --sidebar-ring: #4B6A4C;
+  --radius: 1.25rem;
+  --sidebar: #F7F3E8;
+
+  /* Legacy tokens (mapped to botanical equivalents) */
+  --void: #1A1510;
+  --mana: #4B6A4C;
+  --toxic: #A0A088;
+  --blight: #B52121;
+  --mist: #6B3710;
+}
+
+/* ── Theme mapping ── */
+@theme {
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-code);
+
+  --breakpoint-toast-mobile: 600px;
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-sm: calc(var(--radius) - 8px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar-background);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Custom Sorcerer colors */
+  --color-void: var(--void);
+  --color-mana: var(--mana);
+  --color-toxic: var(--toxic);
+  --color-blight: var(--blight);
+  --color-mist: var(--mist);
+
+  /* Botanical palette direct access */
+  --color-parchment: var(--parchment);
+  --color-parchment-dark: var(--parchment-dark);
+  --color-oak: var(--oak);
+  --color-oak-light: var(--oak-light);
+  --color-moss: var(--moss);
+  --color-moss-light: var(--moss-light);
+  --color-sage: var(--sage);
+  --color-witchberry: var(--witchberry);
+  --color-topaz: var(--topaz);
+  --color-miami: var(--miami);
+}
+
+/* ═══════════════════════════════════════════════════════
+   BASE LAYER — Paper Texture & Typography
+   ═══════════════════════════════════════════════════════ */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border, currentcolor);
+  }
+
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    overflow-x: hidden;
+    position: relative;
+    font-family: var(--font-body), system-ui, sans-serif;
+    /* Parchment texture: noise overlay via pseudo-element */
+    background-color: var(--parchment);
+    background-image:
+      radial-gradient(ellipse at 20% 50%, rgba(221,160,89,0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 20%, rgba(75,106,76,0.04) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 80%, rgba(160,160,136,0.05) 0%, transparent 50%);
+  }
+
+  /* Aged vignette effect */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    box-shadow: inset 0 0 150px 60px rgba(26,21,16,0.08);
+  }
+
+  /* Paper grain texture overlay */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9998;
+    opacity: 0.3;
+    mix-blend-mode: multiply;
+    filter: url(#paper-texture);
+  }
+
+  /* Typography hierarchy */
+  h1, h2, h3 {
+    font-family: var(--font-header), cursive;
+    color: var(--oak);
+    letter-spacing: -0.01em;
+  }
+
+  h4, h5, h6 {
+    font-family: var(--font-sub), cursive;
+    color: var(--oak);
+  }
+
+  code, pre, .font-mono {
+    font-family: var(--font-code), monospace;
+  }
+
+  /* Italic comments in code get cursive style */
+  code em, code .italic, pre .comment, .cm-comment {
+    font-style: italic;
+    opacity: 0.8;
+  }
+
+  a {
+    color: var(--miami);
+    text-decoration-color: rgba(89,201,241,0.3);
+    text-underline-offset: 2px;
+    transition: color 0.2s ease, text-decoration-color 0.2s ease;
+  }
+
+  a:hover {
+    color: var(--moss);
+    text-decoration-color: var(--moss);
+  }
+
+  ::selection {
+    background: rgba(89,201,241,0.2);
+    color: var(--oak);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   UTILITIES
+   ═══════════════════════════════════════════════════════ */
+@utility text-balance {
+  text-wrap: balance;
+}
+
+@utility -webkit-overflow-scrolling-touch {
+  -webkit-overflow-scrolling: touch;
+}
+
+@utility touch-pan-y {
+  touch-action: pan-y;
+}
+
+@utility overscroll-behavior-contain {
+  overscroll-behavior: contain;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SPECIMEN CARD — Reusable botanical card style
+   ═══════════════════════════════════════════════════════ */
+.specimen-card {
+  background: var(--parchment);
+  border: 1px solid rgba(107,55,16,0.15);
+  border-radius: 1.25rem;
+  box-shadow: 0 2px 24px -4px rgba(107,55,16,0.12), 0 1px 4px -1px rgba(107,55,16,0.08);
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.specimen-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  filter: url(#rough-edge);
+  border: 1px solid rgba(107,55,16,0.1);
+}
+
+.specimen-card:hover {
+  box-shadow: 0 8px 32px -4px rgba(107,55,16,0.18), 0 2px 8px -1px rgba(107,55,16,0.10);
+  transform: translateY(-2px);
+}
+
+/* ═══════════════════════════════════════════════════════
+   ENCHANTED TERMINAL — Mossy slate tablet
+   ═══════════════════════════════════════════════════════ */
+.enchanted-terminal {
+  background: linear-gradient(145deg, #3d5a3e, #4B6A4C, #3a5239);
+  border: 1.5px solid var(--oak);
+  border-radius: 1rem;
+  font-family: var(--font-code), monospace;
+  color: #d4e4d4;
+  position: relative;
+  overflow: hidden;
+  filter: url(#rough-edge);
+  transition: box-shadow 0.4s ease;
+}
+
+.enchanted-terminal::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(160,160,136,0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 80%, rgba(0,0,0,0.15) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.enchanted-terminal:focus-within {
+  box-shadow: 0 0 0 2px rgba(160,160,136,0.3), 0 0 20px rgba(160,160,136,0.15);
+}
+
+/* ═══════════════════════════════════════════════════════
+   MAGIC ORB — Primary action trigger
+   ═══════════════════════════════════════════════════════ */
+.magic-orb {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #a0a088, #4b6a4c);
+  box-shadow: 0 0 30px rgba(160,160,136,0.4), inset -10px -10px 50px rgba(0,0,0,0.5);
+  filter: contrast(110%) brightness(1.2);
+  cursor: pointer;
+  position: relative;
+  transition: filter 0.3s ease, transform 0.2s ease;
+}
+
+.magic-orb:hover {
+  filter: contrast(115%) brightness(1.4);
+  transform: scale(1.05);
+}
+
+.magic-orb:active {
+  transform: scale(0.95);
+}
+
+.magic-orb-ripple {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(160,160,136,0.5);
+  animation: orbRipple 0.6s ease-out forwards;
+}
+
+@keyframes orbRipple {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   HAND-DRAWN BORDER UTILITY
+   ═══════════════════════════════════════════════════════ */
+.border-hand-drawn {
+  filter: url(#rough-edge);
+}
+
+/* ═══════════════════════════════════════════════════════
+   SKELETON LOADING
+   ═══════════════════════════════════════════════════════ */
+.skeleton {
+  * {
+    pointer-events: none !important;
+  }
+
+  *[class^="text-"] {
+    color: transparent;
+    @apply rounded-md bg-oak/10 select-none animate-pulse;
+  }
+
+  .skeleton-bg {
+    @apply bg-oak/5;
+  }
+
+  .skeleton-div {
+    @apply bg-oak/10 animate-pulse;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   PROSE MIRROR / CODE MIRROR — Botanical theme
+   ═══════════════════════════════════════════════════════ */
+.ProseMirror {
+  outline: none;
+}
+
+.cm-editor,
+.cm-gutters {
+  background: var(--moss) !important;
+  color: #d4e4d4 !important;
+  outline: none !important;
+}
+
+.cm-editor ::selection {
+  background: rgba(89,201,241,0.25) !important;
+}
+
+.ͼo.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
+.ͼo.cm-selectionBackground,
+.ͼo.cm-content::selection {
+  background: rgba(89,201,241,0.2) !important;
+}
+
+.cm-activeLine,
+.cm-activeLineGutter {
+  background: rgba(160,160,136,0.1) !important;
+}
+
+.cm-activeLine {
+  border-radius: 0 4px 4px 0 !important;
+}
+
+.cm-lineNumbers {
+  min-width: 1.75rem;
+  color: rgba(160,160,136,0.5);
+}
+
+.cm-foldGutter {
+  min-width: 0.75rem;
+}
+
+.cm-lineNumbers .cm-activeLineGutter {
+  border-radius: 4px 0 0 4px !important;
+}
+
+.suggestion-highlight {
+  background: rgba(89,201,241,0.15);
+}
+
+.suggestion-highlight:hover {
+  background: rgba(89,201,241,0.25);
+}
+
+/* ═══════════════════════════════════════════════════════
+   SCROLLBAR — Thin, organic
+   ═══════════════════════════════════════════════════════ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(107,55,16,0.15);
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(107,55,16,0.3);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(107,55,16,0.15) transparent;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SIDEBAR THEME (inline)
+   ═══════════════════════════════════════════════════════ */
+@theme inline {
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* ═══════════════════════════════════════════════════════
+   iOS-LIKE GLASS MORPHISM UTILITIES
+   ═══════════════════════════════════════════════════════ */
+.glass-panel {
+  background: rgba(247,243,232,0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(107,55,16,0.1);
+}
+
+.glass-panel-dark {
+  background: rgba(75,106,76,0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(107,55,16,0.2);
+}
