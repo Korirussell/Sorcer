@@ -1,46 +1,113 @@
-from fastapi import APIRouter, Body
-from core.compression import EcoCompressor
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel
 
+from core.orchestrator import EcoOrchestrator
+from core.receipt_store import set_receipt as store_receipt
+
 router = APIRouter(tags=["action"])
+orchestrator = EcoOrchestrator()
 
-# Initialize once at the module level
-compressor = EcoCompressor(aggressive=True)
 
-# Define a quick schema for the request so FastAPI knows what to expect
 class OrchestrateRequest(BaseModel):
     prompt: str
     user_id: str
     project_id: str
     is_urgent: bool = False
+    bypass_eco: bool = False
+    deadline: Optional[datetime] = None
+
 
 @router.post("/orchestrate")
 async def orchestrate(req: OrchestrateRequest):
-    #CALL FROM ORCHESTRATOR . PY
-    
-    
-    # We can use the 'result' metadata to show off the savings
-    resp = {
+    results = await orchestrator.process(req)
+
+    if results.get("status") == "deferred":
+        return {
+            "status": "deferred",
+            "chat_id": f"{req.user_id}_uuid",
+            "response": "",
+            "receipt_id": None,
+            "deferred": True,
+            "task_id": results["task_id"],
+            "message": results["message"],
+        }
+
+    return {
         "status": "complete",
         "chat_id": f"{req.user_id}_uuid",
-        "response": f"Processed: {result['compressed_text']}",
-        "receipt_id": "rec_uuid",
+        "response": results.get("response", ""),
+        "receipt_id": results.get("receipt_id") or "rec_uuid",
         "deferred": False,
-        "eco_stats": {
-            "tokens_saved": result["saved_tokens"],
-            "reduction": f"{(result['saved_tokens'] / result['original_count']) * 100:.1f}%" if result['original_count'] > 0 else "0%"
-        }
+        "eco_stats": results.get("eco_stats", {}),
     }
-    return resp
+
 
 @router.post("/deferred/execute/{task_id}")
 async def deferred_execute(task_id: str):
-    resp = {
-        "status": "processing",
-        "new_eta": "2026-02-07T05:00:00Z",
-        "current_grid_intensity": 140.2,
+    try:
+        task_id_int = int(task_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="task_id must be an integer")
+
+    try:
+        task = await orchestrator.db.get_task_by_id(task_id_int)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    if task is None or task.get("status") != "deferred":
+        raise HTTPException(status_code=404, detail="Task not found or already completed")
+
+    try:
+        prompt_text = task["prompt"]
+        model_tier = task["model_tier"]
+        raw_response = await orchestrator.client.generate(prompt_text, model_tier)
+    except Exception:
+        raise HTTPException(status_code=503, detail="LLM call failed")
+
+    comp = orchestrator.compressor.compress(prompt_text)
+    grid_intensity = 100.0
+    impact = orchestrator.logger.calculate_savings(
+        {
+            "original_tokens": comp["original_count"],
+            "final_tokens": comp["final_count"],
+            "model": model_tier,
+        },
+        grid_intensity,
+    )
+
+    try:
+        await orchestrator.db.complete_task(task_id_int, raw_response, impact)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Failed to complete task in database")
+
+    receipt_id = f"rec_deferred_{task_id}"
+    store_receipt(
+        receipt_id,
+        {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "server_location": "us-central1 (Iowa)",
+            "model_used": model_tier,
+            "baseline_co2_est": impact.get("baseline_co2", 4.2),
+            "actual_co2": impact.get("actual_co2", 1.8),
+            "net_savings": impact.get("co2_saved_grams", 2.4),
+            "was_cached": False,
+            "energy_kwh": impact.get("energy_kwh", 0.004),
+            "grid_source": {"wind": 60, "solar": 22, "gas": 18},
+        },
+    )
+
+    return {
+        "status": "complete",
+        "new_eta": datetime.utcnow().isoformat() + "Z",
+        "current_grid_intensity": grid_intensity,
+        "response": raw_response,
+        "receipt_id": receipt_id,
+        "eco_stats": impact,
     }
-    return resp
+
 
 @router.post("/bypass")
 async def bypass(prompt: str = Body(..., embed=True)):

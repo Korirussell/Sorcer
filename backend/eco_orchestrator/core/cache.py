@@ -12,7 +12,7 @@ import os
 import hashlib
 from typing import Optional, Any
 
-from core import RedisCache
+from core.redis import RedisCache
 
 try:
     from redisvl.extensions.llmcache import SemanticCache
@@ -29,9 +29,11 @@ DEFAULT_TTL = int(os.getenv("CACHE_TTL", 3600))
 REDIS_URL = os.getenv("REDIS_URL", f"redis://{REDIS_HOST}:{REDIS_PORT}")
 
 
-# Instantiate a module-level key/value cache using your Redis wrapper.
-# This keeps simple KV operations centralised.
-kv_cache = RedisCache(host=REDIS_HOST, port=REDIS_PORT, default_ttl=DEFAULT_TTL)
+# Instantiate a module-level key/value cache (optional: app starts even if Redis is down).
+try:
+    kv_cache = RedisCache(host=REDIS_HOST, port=REDIS_PORT, default_ttl=DEFAULT_TTL)
+except Exception:
+    kv_cache = None
 
 
 # Optional semantic cache (may remain None if `redisvl` not installed)
@@ -72,12 +74,16 @@ def prompt_hash(prompt: str) -> str:
 
 def check_hash_cache(prompt: str) -> Optional[Any]:
     """Return cached value for exact prompt match (normalized/hash) or None."""
+    if kv_cache is None:
+        return None
     key = f"prompt:hash:{prompt_hash(prompt)}"
     return kv_cache.get(key)
 
 
 def add_hash_cache(prompt: str, output: Any, ttl: Optional[int] = None) -> bool:
     """Add prompt->output to the exact-match KV cache."""
+    if kv_cache is None:
+        return False
     key = f"prompt:hash:{prompt_hash(prompt)}"
     return kv_cache.set(key, output, ttl=ttl)
 
@@ -150,7 +156,9 @@ def check_if_prompt_is_in_cache(prompt: str, semantic_fallback: bool = True) -> 
 
 
 def add_prompt_to_cache(prompt: str, output: Any, use_semantic: bool = True, ttl: Optional[int] = None) -> None:
-    """Add prompt to both exact hash cache and (optionally) semantic cache."""
+    """Add prompt to both exact hash cache and (optionally) semantic cache. No-op if Redis is down."""
+    if kv_cache is None:
+        return
     add_hash_cache(prompt, output, ttl=ttl)
     if use_semantic:
         add_semantic_cache(prompt, output)

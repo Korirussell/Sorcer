@@ -21,5 +21,8 @@ class GreenLogger:
         return {
             "wh_saved": round(baseline_wh - actual_wh, 6),
             "co2_saved_grams": round(baseline_co2 - actual_co2, 6),
-            "efficiency_multiplier": round(baseline_co2 / actual_co2, 1) if actual_co2 > 0 else 100
+            "efficiency_multiplier": round(baseline_co2 / actual_co2, 1) if actual_co2 > 0 else 100,
+            "baseline_co2": round(baseline_co2, 4),
+            "actual_co2": round(actual_co2, 4),
+            "energy_kwh": round(actual_wh / 1000, 6),
         }

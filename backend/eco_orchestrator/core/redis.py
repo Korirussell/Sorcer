@@ -38,6 +38,7 @@ class RedisCache:
             password: Redis password if required (default: None)
             default_ttl: Default time-to-live in seconds for cached items (default: None)
         """
+        self.default_ttl = default_ttl
         try:
             self.redis_client = redis.Redis(
                 host=host,
@@ -47,14 +48,11 @@ class RedisCache:
                 decode_responses=True,
                 socket_connect_timeout=5
             )
-            # Test the connection
             self.redis_client.ping()
             logger.info(f"✓ Redis cache connected to {host}:{port}")
         except redis.ConnectionError as e:
-            logger.error(f"✗ Failed to connect to Redis: {e}")
-            raise
-        
-        self.default_ttl = default_ttl
+            logger.warning(f"✗ Redis unavailable ({host}:{port}), cache disabled: {e}")
+            self.redis_client = None
     
     def exists(self, key: str) -> bool:
         """
@@ -66,6 +64,8 @@ class RedisCache:
         Returns:
             True if the key exists, False otherwise
         """
+        if self.redis_client is None:
+            return False
         try:
             return self.redis_client.exists(key) > 0
         except redis.RedisError as e:
@@ -83,6 +83,8 @@ class RedisCache:
             The cached value (deserialized from JSON if applicable),
             or None if the key doesn't exist
         """
+        if self.redis_client is None:
+            return None
         try:
             value = self.redis_client.get(key)
             if value is None:
@@ -115,6 +117,8 @@ class RedisCache:
         Returns:
             True if the operation succeeded, False otherwise
         """
+        if self.redis_client is None:
+            return False
         try:
             # Serialize value to JSON if it's not a string
             if isinstance(value, str):
@@ -146,6 +150,8 @@ class RedisCache:
         Returns:
             True if the key was deleted, False otherwise
         """
+        if self.redis_client is None:
+            return False
         try:
             deleted = self.redis_client.delete(key)
             return deleted > 0
@@ -160,6 +166,8 @@ class RedisCache:
         Returns:
             True if successful, False otherwise
         """
+        if self.redis_client is None:
+            return False
         try:
             self.redis_client.flushdb()
             logger.info("✓ Cache cleared")
@@ -178,6 +186,8 @@ class RedisCache:
         Returns:
             List of keys matching the pattern
         """
+        if self.redis_client is None:
+            return []
         try:
             return self.redis_client.keys(pattern)
         except redis.RedisError as e:
@@ -186,6 +196,8 @@ class RedisCache:
     
     def close(self) -> None:
         """Close the Redis connection."""
+        if self.redis_client is None:
+            return
         try:
             self.redis_client.close()
             logger.info("✓ Redis connection closed")
