@@ -16,6 +16,15 @@ def analyze_prompt():
 
 @router.get("/grid/map")
 def get_grid_map():
+
+    '''
+    BEN you must do some sort of the following: 
+    1) if our cache has data that is less than THRESHOLD amount of time old, return cache
+    2) if not, you must use a method (which you need to create) that calls our energy api
+    parses the results, saves the results to the cache.
+    
+    '''
+
     resp = {
         "regions": [
             {
