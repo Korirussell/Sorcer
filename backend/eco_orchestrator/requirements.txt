@@ -15,7 +15,6 @@ requests                        # Calling WattTime / ElectricityMaps APIs
 
 # --- Data & Caching ---
 chromadb                        # For the semantic caching (Vector DB)
-sqlite3                         # Built-in, but ensure it's in your env
 
 # --- Utilities ---
 rich                            # For beautiful terminal logs (Huge for demos)
