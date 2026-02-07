@@ -17,12 +17,12 @@ class GreenLogger:
         model_rate = self.WH_PER_TOKEN_FLASH if "flash" in stats['model'] else self.WH_PER_TOKEN_PRO
         actual_wh = stats['final_tokens'] * model_rate
         actual_co2 = (actual_wh / 1000) * grid_intensity
-        net_savings = round(baseline_co2 - actual_co2, 6)
-
+        
         return {
             "wh_saved": round(baseline_wh - actual_wh, 6),
-            "co2_saved_grams": net_savings,
+            "co2_saved_grams": round(baseline_co2 - actual_co2, 6),
             "efficiency_multiplier": round(baseline_co2 / actual_co2, 1) if actual_co2 > 0 else 100,
-            "baseline_co2": round(baseline_co2, 6),
-            "actual_co2": round(actual_co2, 6),
+            "baseline_co2": round(baseline_co2, 4),
+            "actual_co2": round(actual_co2, 4),
+            "energy_kwh": round(actual_wh / 1000, 6),
         }

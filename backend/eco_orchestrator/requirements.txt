@@ -20,7 +20,6 @@ requests
 
 # --- Data & Caching ---
 chromadb==0.4.24
-redis>=5.0
 
 # --- Utilities ---
 rich
