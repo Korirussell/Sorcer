@@ -9,23 +9,23 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        /* ── Botanical Journal palette ── */
-        parchment: "#F7F3E8",
-        "parchment-dark": "#EDE8D6",
-        oak: "#6B3710",
-        "oak-light": "#8B5E3C",
-        moss: "#4B6A4C",
-        "moss-light": "#5E8260",
-        sage: "#A0A088",
-        witchberry: "#B52121",
-        topaz: "#DDA059",
-        miami: "#59C9F1",
+        /* ── Botanical Journal palette (CSS var-based for dark mode) ── */
+        parchment: "var(--parchment)",
+        "parchment-dark": "var(--parchment-dark)",
+        oak: "var(--oak)",
+        "oak-light": "var(--oak-light)",
+        moss: "var(--moss)",
+        "moss-light": "var(--moss-light)",
+        sage: "var(--sage)",
+        witchberry: "var(--witchberry)",
+        topaz: "var(--topaz)",
+        miami: "var(--miami)",
         /* keep legacy tokens so existing chat pages don't break */
-        void: "#1A1510",
-        mana: "#4B6A4C",
-        toxic: "#A0A088",
-        blight: "#B52121",
-        mist: "#6B3710",
+        void: "var(--void)",
+        mana: "var(--mana)",
+        toxic: "var(--toxic)",
+        blight: "var(--blight)",
+        mist: "var(--mist)",
       },
       fontFamily: {
         header: ["var(--font-header)", "cursive"],

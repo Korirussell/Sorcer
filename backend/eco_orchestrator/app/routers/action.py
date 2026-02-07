@@ -3,7 +3,7 @@ from core.compression import EcoCompressor
 from pydantic import BaseModel
 
 router = APIRouter(tags=["action"])
-
+orchestrator = EcoOrchestrator()
 # Initialize once at the module level
 compressor = EcoCompressor(aggressive=True)
 
@@ -18,7 +18,7 @@ class OrchestrateRequest(BaseModel):
 async def orchestrate(req: OrchestrateRequest):
     #CALL FROM ORCHESTRATOR . PY
     
-    
+    result = orchestrator.process(req)
     # We can use the 'result' metadata to show off the savings
     resp = {
         "status": "complete",
