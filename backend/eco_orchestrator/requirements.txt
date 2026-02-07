@@ -1,21 +1,26 @@
 # --- Backend Core ---
-fastapi[all]                    # Framework + Uvicorn + Pydantic
-python-dotenv                   # For .env management
-pydantic-settings               # Advanced config management
+fastapi>=0.110
+uvicorn>=0.27
+watchfiles
+httptools
+python-multipart
+
+python-dotenv
+pydantic-settings
 
 # --- AI & Orchestration ---
-google-genai                    # New Google AI SDK (Vertex + AI Studio)
-langgraph                       # For stateful deferred workflows
-langchain-google-genai          # LangChain wrapper if needed for the graph
-tiktoken                        # For accurate token counting/pricing
+google-genai
+langgraph
+langchain-google-genai
+tiktoken
 
 # --- Carbon & Grid Intelligence ---
-codecarbon                      # Local hardware emission tracking
-requests                        # Calling WattTime / ElectricityMaps APIs
+codecarbon
+requests
 
 # --- Data & Caching ---
-chromadb                        # For the semantic caching (Vector DB)
+chromadb==0.4.24
 
 # --- Utilities ---
-rich                            # For beautiful terminal logs (Huge for demos)
-loguru                          # Easy, structured logging
+rich
+loguru
