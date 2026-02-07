@@ -1,7 +1,7 @@
 import re
 
 class EcoCompressor:
-    # Move patterns here if you want them accessible without an instance
+    #patterns
     FLUFF_PATTERNS = [
         r"\b(please|kindly|could you|would you mind|i was wondering if|thank you)\b",
         r"\s+", 

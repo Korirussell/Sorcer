@@ -16,21 +16,8 @@ class OrchestrateRequest(BaseModel):
 
 @router.post("/orchestrate")
 async def orchestrate(req: OrchestrateRequest):
-    '''# If the prompt is too short, analysis is an energy waste.
-    if len(req.prompt.strip()) < 20:
-        return {
-            "status": "direct_execution",
-            "model": "gemini-1.5-flash",
-            "reason": "Prompt below analysis threshold",
-            "eco_stats": {"saved_tokens": 0, "status": "bypass"},
-            "response": "Direct response logic here..."
-        }'''
-    #1) CHECK CACHE
+    #CALL FROM ORCHESTRATOR . PY
     
-
-
-    # Call the compressor using the module-level object
-    result = compressor.compress(req.prompt)
     
     # We can use the 'result' metadata to show off the savings
     resp = {
