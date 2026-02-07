@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Send, Leaf, Zap, Flame, Sprout, ChevronDown } from "lucide-react";
+import { Send, Leaf, Zap, Flame, Sprout, ChevronDown, Clock } from "lucide-react";
+import { toast } from "sonner";
 import { useEnergy } from "@/context/EnergyContext";
+import { SearchVines } from "./SearchVines";
 
 function setCookie(name: string, value: string) {
   const maxAge = 60 * 60 * 24 * 365;
@@ -10,18 +12,28 @@ function setCookie(name: string, value: string) {
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}`;
 }
 
+const SCHEDULE_OPTIONS = [
+  { label: "Next 6 hours", value: "6h" },
+  { label: "Tonight", value: "tonight" },
+  { label: "When grid is cleanest", value: "optimal" },
+];
+
 export function SpellBar({
   input,
   setInput,
   onSubmit,
   status,
+  enableScheduling = false,
 }: {
   input: string;
   setInput: (value: string) => void;
   onSubmit: () => void;
   status: "ready" | "submitted" | "streaming" | "error";
+  enableScheduling?: boolean;
 }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const { mode, selectedModelId, setMode, setSelectedModelId } = useEnergy();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -61,7 +73,18 @@ export function SpellBar({
 
   return (
     <div className="mx-auto max-w-2xl w-full">
-      <form onSubmit={handleSubmit} className="specimen-card">
+      <SearchVines isFocused={isFocused}>
+      <form
+        onSubmit={handleSubmit}
+        className="specimen-card"
+        style={{
+          transform: isFocused ? "translateY(-2px) scale(1.01)" : "translateY(0) scale(1)",
+          boxShadow: isFocused
+            ? "0 8px 30px rgba(107,55,16,0.12), 0 2px 8px rgba(107,55,16,0.06)"
+            : undefined,
+          transition: "transform 0.25s ease-out, box-shadow 0.25s ease-out",
+        }}
+      >
         {/* Input row */}
         <div className="flex items-center gap-3 p-3">
           {/* Model selector pill */}
@@ -94,7 +117,7 @@ export function SpellBar({
 
             {/* Dropdown */}
             {isDropdownOpen && (
-              <div className="absolute bottom-full left-0 mb-2 w-64 glass-panel rounded-2xl shadow-specimen-hover z-50 overflow-hidden animate-page-turn">
+              <div className="absolute bottom-full left-0 mb-2 w-64 bg-[#fffbf0] border border-[#5c4033]/30 rounded-2xl shadow-specimen-hover z-50 overflow-hidden animate-page-turn">
                 <div className="p-2">
                   {/* Auto option */}
                   <button
@@ -155,10 +178,56 @@ export function SpellBar({
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
             placeholder="Ask the Oracle..."
             disabled={isLoading}
+            data-spellbar
             className="flex-1 px-3 py-2.5 bg-transparent text-oak placeholder:text-oak/30 focus:outline-none text-sm"
           />
+
+          {/* Schedule dropdown */}
+          {enableScheduling && (
+            <div className="relative">
+              <button
+                type="button"
+                disabled={!input.trim() || status !== "ready"}
+                onClick={() => setIsScheduleOpen(!isScheduleOpen)}
+                className={`
+                  w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200
+                  ${input.trim() && status === "ready"
+                    ? "bg-topaz/15 text-topaz border border-topaz/20 hover:bg-topaz/25 active:scale-95"
+                    : "bg-oak/5 text-oak/15 cursor-not-allowed"
+                  }
+                `}
+                title="Schedule for later"
+              >
+                <Clock className="w-4 h-4" />
+              </button>
+              {isScheduleOpen && (
+                <div className="absolute bottom-full right-0 mb-2 w-52 bg-parchment border border-oak/15 rounded-xl shadow-specimen-hover z-50 overflow-hidden animate-page-turn">
+                  <div className="px-3 py-2 text-[10px] font-medium text-oak/40 uppercase tracking-wider border-b border-oak/8">Schedule for Later</div>
+                  {SCHEDULE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        if (input.trim()) {
+                          toast.success(`Prompt scheduled: ${opt.label}`, { description: input.trim().slice(0, 60) + (input.trim().length > 60 ? "..." : "") });
+                          setInput("");
+                          setIsScheduleOpen(false);
+                        }
+                      }}
+                      className="w-full text-left px-3 py-2.5 text-sm text-oak hover:bg-moss/8 transition-colors flex items-center gap-2"
+                    >
+                      <Clock className="w-3 h-3 text-topaz" />
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Submit — Magic Orb mini */}
           <button
@@ -187,10 +256,11 @@ export function SpellBar({
           </div>
         )}
       </form>
+      </SearchVines>
 
-      {/* Close dropdown on outside click */}
-      {isDropdownOpen && (
-        <div className="fixed inset-0 z-40" onClick={() => setIsDropdownOpen(false)} />
+      {/* Close dropdowns on outside click */}
+      {(isDropdownOpen || isScheduleOpen) && (
+        <div className="fixed inset-0 z-40" onClick={() => { setIsDropdownOpen(false); setIsScheduleOpen(false); }} />
       )}
     </div>
   );

@@ -71,6 +71,81 @@
   --mist: #6B3710;
 }
 
+/* ── Corrupted (Dark) Mode ── */
+.dark {
+  --parchment: #1A1510;
+  --parchment-dark: #2A2015;
+  --oak: #EDE8D6;
+  --oak-light: #C8BFA8;
+  --moss: #6BDF6B;
+  --moss-light: #8AEF8A;
+  --sage: #8A8A70;
+  --witchberry: #FF4444;
+  --topaz: #FFB84D;
+  --miami: #59C9F1;
+
+  --background: #1A1510;
+  --foreground: #EDE8D6;
+  --card: #2A2015;
+  --card-foreground: #EDE8D6;
+  --popover: #2A2015;
+  --popover-foreground: #EDE8D6;
+  --primary: #6BDF6B;
+  --primary-foreground: #1A1510;
+  --secondary: #2A2015;
+  --secondary-foreground: #EDE8D6;
+  --muted: #2A2015;
+  --muted-foreground: #C8BFA8;
+  --accent: #FFB84D;
+  --accent-foreground: #1A1510;
+  --destructive: #FF4444;
+  --destructive-foreground: #1A1510;
+  --border: #EDE8D620;
+  --input: #EDE8D615;
+  --ring: #6BDF6B;
+  --sidebar-background: #1A1510;
+  --sidebar-foreground: #EDE8D6;
+  --sidebar-primary: #6BDF6B;
+  --sidebar-primary-foreground: #1A1510;
+  --sidebar-accent: #2A2015;
+  --sidebar-accent-foreground: #EDE8D6;
+  --sidebar-border: #EDE8D615;
+  --sidebar-ring: #6BDF6B;
+  --sidebar: #1A1510;
+
+  --void: #1A1510;
+  --mana: #6BDF6B;
+  --toxic: #8A8A70;
+  --blight: #FF4444;
+  --mist: #EDE8D6;
+}
+
+.dark .specimen-card {
+  background: #2A2015;
+  border-color: rgba(237,232,214,0.1);
+  box-shadow: 0 2px 24px -4px rgba(0,0,0,0.3), 0 0 1px rgba(107,223,107,0.1);
+}
+
+.dark .specimen-card:hover {
+  box-shadow: 0 8px 32px -4px rgba(0,0,0,0.4), 0 0 4px rgba(107,223,107,0.15);
+}
+
+.dark .specimen-card::before {
+  border-color: rgba(237,232,214,0.05);
+}
+
+.dark .glass-panel {
+  background: rgba(26,21,16,0.85);
+  border-color: rgba(237,232,214,0.1);
+}
+
+.dark body {
+  background-color: #1A1510;
+  background-image:
+    radial-gradient(ellipse at 20% 50%, rgba(107,223,107,0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(255,68,68,0.02) 0%, transparent 50%);
+}
+
 /* ── Theme mapping ── */
 @theme {
   --font-sans: var(--font-body);
@@ -164,7 +239,7 @@
     position: relative;
     font-family: var(--font-body), system-ui, sans-serif;
     /* Parchment texture: noise overlay via pseudo-element */
-    background-color: var(--parchment);
+    background-color: #fdf6e3;
     background-image:
       radial-gradient(ellipse at 20% 50%, rgba(221,160,89,0.06) 0%, transparent 50%),
       radial-gradient(ellipse at 80% 20%, rgba(75,106,76,0.04) 0%, transparent 50%),
@@ -278,6 +353,12 @@
 .specimen-card:hover {
   box-shadow: 0 8px 32px -4px rgba(107,55,16,0.18), 0 2px 8px -1px rgba(107,55,16,0.10);
   transform: translateY(-2px);
+  animation: rune-glow 3s ease-in-out infinite;
+}
+
+@keyframes rune-glow {
+  0%, 100% { box-shadow: 0 8px 32px -4px rgba(107,55,16,0.18), 0 0 8px rgba(75,106,76,0.12); }
+  50% { box-shadow: 0 8px 32px -4px rgba(107,55,16,0.18), 0 0 12px rgba(221,160,89,0.15); }
 }
 
 /* ═══════════════════════════════════════════════════════
