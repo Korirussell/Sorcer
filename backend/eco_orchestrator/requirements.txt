@@ -9,9 +9,9 @@ python-dotenv
 pydantic-settings
 
 # --- AI & Orchestration ---
-google-genai
+google-cloud-aiplatform>=1.60
+anthropic[vertex]>=0.40
 langgraph
-langchain-google-genai
 tiktoken
 
 # --- Carbon & Grid Intelligence ---

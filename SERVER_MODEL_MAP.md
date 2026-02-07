@@ -1,9 +1,10 @@
 # 🗺️ Definitive Server & Model Map — Carbon-Aware AI Router
 
 > **Date:** February 2026  
-> **Providers:** Google Vertex AI (MaaS only) + xAI API  
+> **Providers:** Google Vertex AI (MaaS only)  
 > **Billing Mode:** Pay-per-token ONLY — no dedicated GPU endpoints  
-> **Source:** Google Cloud Vertex AI docs, Google Environmental Reports (CFE%), xAI API docs
+> **Source:** Google Cloud Vertex AI docs, Google Environmental Reports (CFE%)  
+> **Enabled Models:** Gemini (Flash/Pro), Claude 3.5 (Opus/Sonnet/Haiku), Llama 4, Llama 3.1, Mistral Medium
 
 ---
 
@@ -30,9 +31,9 @@ model = GenerativeModel("gemini-1.5-flash")
 
 | Power Level | Category | Models | Approx Cost | Use When |
 |---|---|---|---|---|
-| **🟢 Low** | Small/Fast/Cheap | Gemini 2.0 Flash, Gemini 1.5 Flash, Claude 3.5 Haiku, Llama 3.1 8B, Grok-2-mini | $0.01–0.10/1K tokens | Simple chat, summaries, quick Q&A |
-| **🟡 Medium** | Balanced | Gemini 1.5 Pro, Gemini 2.5 Pro, Claude 3.5 Sonnet, Llama 3.1 70B, Grok-2, DeepSeek R1 | $0.10–1.00/1K tokens | Reasoning, analysis, coding |
-| **🔴 High** | Large/Slow/Expensive | Claude 3 Opus, Llama 3.1 405B | $1.00+/1K tokens | Complex multi-step reasoning |
+| **🟢 Low** | Small/Fast/Cheap | Gemini 2.0 Flash, Gemini 1.5 Flash, Claude 3.5 Haiku, Llama 3.1 8B, Llama 4 8B | $0.01–0.10/1K tokens | Simple chat, summaries, quick Q&A |
+| **🟡 Medium** | Balanced | Gemini 1.5 Pro, Gemini 2.5 Pro, Claude 3.5 Sonnet, Llama 3.1 70B, Llama 4 70B, Mistral Medium | $0.10–1.00/1K tokens | Reasoning, analysis, coding |
+| **🔴 High** | Large/Slow/Expensive | Claude 3.5 Opus, Llama 3.1 405B, Llama 4 405B | $1.00+/1K tokens | Complex multi-step reasoning |
 
 ---
 
@@ -105,12 +106,16 @@ model = GenerativeModel("gemini-1.5-flash")
   - `gemini-2.0-flash` (Low)
   - `gemini-2.5-flash` (Low) — if available
   - `gemini-2.5-pro` (Medium) — if available
-  - `deepseek-r1` (Medium) ✅
   - `meta/llama-3.1-8b-instruct` (Low) ✅
   - `meta/llama-3.1-70b-instruct` (Medium) ✅
   - `meta/llama-3.1-405b-instruct` (High) ✅
-  - `claude-3-5-sonnet-v2@20241022` (Medium) — likely expanded here
-  - `claude-3-5-haiku@20241022` (Low) — likely expanded here
+  - `meta/llama-4-8b-instruct` (Low) ✅
+  - `meta/llama-4-70b-instruct` (Medium) ✅
+  - `meta/llama-4-405b-instruct` (High) ✅
+  - `mistral/mistral-medium` (Medium) ✅
+  - `claude-3-5-sonnet-v2@20241022` (Medium) ✅
+  - `claude-3-5-haiku@20241022` (Low) ✅
+  - `claude-3-5-opus@20241022` (High) ✅
 - **Notes:** 🏠 **THE HUB** — Google's primary US region. Has EVERYTHING, but middling carbon score. Use only when a model isn't available in greener regions.
 
 #### `europe-west3` — Frankfurt, Germany 🇩🇪
@@ -172,21 +177,6 @@ model = GenerativeModel("gemini-1.5-flash")
 
 ---
 
-### Special: xAI (Non-Regional)
-
-#### `xai-global` — Memphis, Tennessee 🇺🇸
-- **Base URL:** `https://api.x.ai/v1`
-- **CFE:** ~25% (TVA Grid — coal/nuclear/hydro mix)
-- **Grid Rating:** ⭐⭐ POOR
-- **Available Models:**
-  - `grok-2` (Medium)
-  - `grok-2-mini` (Low) — if available
-- **Regional Control:** ❌ NONE — xAI has a single global endpoint. You cannot choose which data center serves your request.
-- **Data Center:** xAI's "Colossus" supercluster in Memphis, TN (100K+ H100 GPUs)
-- **Notes:** xAI doesn't offer regional routing. Their Memphis DC runs on the TVA (Tennessee Valley Authority) grid, which is a mix of nuclear (~40%), coal (~15%), hydro (~10%), gas (~30%), and renewables (~5%). Not great, not terrible. Use Grok when the model is specifically needed or as a last-resort fallback.
-
----
-
 ## 📊 The JSON Map (for `router.py`)
 
 ```json
@@ -238,7 +228,7 @@ model = GenerativeModel("gemini-1.5-flash")
       {"id": "gemini-1.5-pro", "power_level": "medium", "provider": "google"},
       {"id": "claude-3-5-sonnet-v2@20241022", "power_level": "medium", "provider": "anthropic"},
       {"id": "claude-3-5-haiku@20241022", "power_level": "low", "provider": "anthropic"},
-      {"id": "claude-3-opus@20240229", "power_level": "high", "provider": "anthropic"}
+      {"id": "claude-3-5-opus@20241022", "power_level": "high", "provider": "anthropic"}
     ],
     "coordinates": [3.8190, 50.4541]
   },
@@ -265,10 +255,14 @@ model = GenerativeModel("gemini-1.5-flash")
       {"id": "gemini-1.5-pro", "power_level": "medium", "provider": "google"},
       {"id": "claude-3-5-sonnet-v2@20241022", "power_level": "medium", "provider": "anthropic"},
       {"id": "claude-3-5-haiku@20241022", "power_level": "low", "provider": "anthropic"},
-      {"id": "deepseek-r1", "power_level": "medium", "provider": "deepseek"},
+      {"id": "claude-3-5-opus@20241022", "power_level": "high", "provider": "anthropic"},
       {"id": "meta/llama-3.1-8b-instruct", "power_level": "low", "provider": "meta"},
       {"id": "meta/llama-3.1-70b-instruct", "power_level": "medium", "provider": "meta"},
-      {"id": "meta/llama-3.1-405b-instruct", "power_level": "high", "provider": "meta"}
+      {"id": "meta/llama-3.1-405b-instruct", "power_level": "high", "provider": "meta"},
+      {"id": "meta/llama-4-8b-instruct", "power_level": "low", "provider": "meta"},
+      {"id": "meta/llama-4-70b-instruct", "power_level": "medium", "provider": "meta"},
+      {"id": "meta/llama-4-405b-instruct", "power_level": "high", "provider": "meta"},
+      {"id": "mistral/mistral-medium", "power_level": "medium", "provider": "mistral"}
     ],
     "coordinates": [-95.8608, 41.2619]
   },
@@ -295,7 +289,7 @@ model = GenerativeModel("gemini-1.5-flash")
       {"id": "gemini-1.5-pro", "power_level": "medium", "provider": "google"},
       {"id": "claude-3-5-sonnet-v2@20241022", "power_level": "medium", "provider": "anthropic"},
       {"id": "claude-3-5-haiku@20241022", "power_level": "low", "provider": "anthropic"},
-      {"id": "claude-3-opus@20240229", "power_level": "high", "provider": "anthropic"}
+      {"id": "claude-3-5-opus@20241022", "power_level": "high", "provider": "anthropic"}
     ],
     "coordinates": [-82.9988, 39.9612]
   },
@@ -333,19 +327,6 @@ model = GenerativeModel("gemini-1.5-flash")
     ],
     "coordinates": [103.8198, 1.3521]
   },
-  "xai-global": {
-    "location": "Memphis, Tennessee, USA",
-    "cfe_percent": 25,
-    "grid_cleanliness": "Poor (TVA Grid — Nuclear/Coal/Gas Mix)",
-    "tier": "dirty",
-    "provider_type": "xai",
-    "base_url": "https://api.x.ai/v1",
-    "regional_control": false,
-    "available_models": [
-      {"id": "grok-2", "power_level": "medium", "provider": "xai"}
-    ],
-    "coordinates": [-90.0490, 35.1495]
-  }
 }
 ```
 
@@ -372,9 +353,8 @@ model = GenerativeModel("gemini-1.5-flash")
 | **Gemini Pro** | `northamerica-northeast1` (98%) | `us-west1` (89%) | `us-central1` (59%) |
 | **Claude Sonnet/Haiku** | `europe-west1` (81%) ✅ | `us-central1` (59%) | `us-east5` (30%) ❌ |
 | **Claude Opus** | `europe-west1` (81%) ✅ | `us-east5` (30%) | — |
-| **DeepSeek R1** | `us-central1` (59%) | — | — (only region) |
-| **Llama 3.1 (any)** | `us-central1` (59%) | — | — (only region) |
-| **Grok** | `xai-global` (25%) | — | — (no choice) |
+| **Llama 3.1/4 (any)** | `us-central1` (59%) | — | — (only region) |
+| **Mistral Medium** | `us-central1` (59%) | — | — (only region) |
 
 ### The "Green Score" Formula
 
@@ -405,7 +385,7 @@ def green_score(region: str, model_id: str, is_urgent: bool) -> float:
 ```python
 # Install: pip install google-cloud-aiplatform anthropic[vertex]
 
-# For Gemini (regional)
+# For Gemini (regional - MaaS)
 import vertexai
 from vertexai.generative_models import GenerativeModel
 
@@ -415,7 +395,7 @@ def call_gemini(prompt: str, region: str, model_id: str):
     response = model.generate_content(prompt)
     return response.text
 
-# For Claude on Vertex (regional)  
+# For Claude on Vertex (regional - MaaS)  
 from anthropic import AnthropicVertex
 
 def call_claude(prompt: str, region: str, model_id: str):
@@ -427,39 +407,22 @@ def call_claude(prompt: str, region: str, model_id: str):
     )
     return response.content[0].text
 
-# For DeepSeek/Llama on Vertex (via Model Garden endpoints)
+# For Llama/Mistral on Vertex (via Model Garden - may require deployment)
 from vertexai.preview.generative_models import GenerativeModel as PreviewModel
 
 def call_partner_model(prompt: str, region: str, model_id: str):
     vertexai.init(project="YOUR_PROJECT", location=region)
-    # Partner models use the Model Garden endpoint format
+    # Partner models (Llama, Mistral) use Model Garden format
+    # Note: Some may require custom deployment, not MaaS
     model = PreviewModel(model_id)
     response = model.generate_content(prompt)
     return response.text
 ```
 
-### 2. xAI Setup (Python)
-```python
-# Uses OpenAI-compatible SDK
-from openai import OpenAI
-
-def call_grok(prompt: str):
-    client = OpenAI(
-        api_key=os.getenv("XAI_API_KEY"),
-        base_url="https://api.x.ai/v1"
-    )
-    response = client.chat.completions.create(
-        model="grok-2",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return response.choices[0].message.content
-```
-
-### 3. Required Environment Variables
+### 2. Required Environment Variables
 ```bash
 GOOGLE_CLOUD_PROJECT=your-project-id
 GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
-XAI_API_KEY=xai-your-key-here
 ```
 
 ---
@@ -487,9 +450,7 @@ XAI_API_KEY=xai-your-key-here
 
 2. **Gemini is your green workhorse:** Gemini Flash is available in the cleanest regions (98% Montréal, 97% Finland). For simple tasks, always route to Gemini Flash in a green region.
 
-3. **Partner models are trapped:** DeepSeek and Llama are only available in `us-central1` (59% CFE). There's no green alternative. Your router should flag this honestly.
+3. **Partner models are region-locked:** Llama 3.1, Llama 4, and Mistral are only available in `us-central1` (59% CFE). There's no green alternative — your router should flag this honestly. Claude has better options (route to Belgium instead of Ohio).
 
-4. **xAI is a carbon liability:** No regional control, dirty grid (~25% CFE), and you can't do anything about it. Use Grok only when specifically requested.
-
-5. **The demo story:** Show a side-by-side: "Claude Sonnet in Ohio = 4.2g CO₂" vs "Claude Sonnet in Belgium = 1.5g CO₂" — same model, same quality, 63% less carbon. That's your hackathon mic drop. 🎤
+4. **The demo story:** Show a side-by-side: "Claude Sonnet in Ohio = 4.2g CO₂" vs "Claude Sonnet in Belgium = 1.5g CO₂" — same model, same quality, 63% less carbon. That's your hackathon mic drop. 🎤
 

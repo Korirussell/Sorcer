@@ -29,23 +29,32 @@ class LLMClient:
 
 ### Target State:
 ```python
-# ✅ NEW — Regional routing enabled for Gemini, Claude, and Grok
+# ✅ NEW — Regional routing enabled for Gemini, Claude, Llama, Mistral
 import vertexai
 from vertexai.generative_models import GenerativeModel
 from anthropic import AnthropicVertex
-from openai import OpenAI
 
 class LLMClient:
     def __init__(self):
         self.project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
-        self.xai_key = os.getenv("XAI_API_KEY")
 
     async def generate(self, prompt: str, model_id: str, region: str):
         # Router picks the region based on carbon score
-        vertexai.init(project=self.project_id, location=region)
-        model = GenerativeModel(model_id)
-        response = await model.generate_content_async(prompt)
-        return response.text
+        if model_id.startswith("claude"):
+            # Claude uses AnthropicVertex SDK
+            client = AnthropicVertex(region=region, project_id=self.project_id)
+            response = client.messages.create(
+                model=model_id,
+                max_tokens=4096,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.content[0].text
+        else:
+            # Gemini, Llama, Mistral use Vertex AI SDK
+            vertexai.init(project=self.project_id, location=region)
+            model = GenerativeModel(model_id)
+            response = await model.generate_content_async(prompt)
+            return response.text
 ```
 
 ---
@@ -103,38 +112,37 @@ gcloud iam service-accounts keys create backend/eco_orchestrator/service-account
 
 ---
 
-## Step 3: Enable Claude in Vertex AI Model Garden
+## Step 3: Enable Models in Vertex AI Model Garden
 
 This MUST be done in the browser — there is no CLI command.
 
 1. Go to **https://console.cloud.google.com/vertex-ai/model-garden**
 2. Make sure your project (`sorcer-hackathon`) is selected in the top bar
-3. Search **"Claude"**
-4. Click **Claude 3.5 Sonnet** → click **"Enable"** → Accept Anthropic's Terms of Service
-5. Click **Claude 3.5 Haiku** → click **"Enable"** → Accept Terms
-6. (Optional) Search **"DeepSeek"** → Enable **DeepSeek R1**
-7. (Optional) Search **"Llama"** → Enable **Llama 3.1** variants
+3. **Enable Claude models:**
+   - Search **"Claude"**
+   - Click **Claude 3.5 Opus** → click **"Enable"** → Accept Anthropic's Terms of Service
+   - Click **Claude 3.5 Sonnet** → click **"Enable"** → Accept Terms
+   - Click **Claude 3.5 Haiku** → click **"Enable"** → Accept Terms
+4. **Enable Llama models:**
+   - Search **"Llama"**
+   - Enable **Llama 4** variants (8B, 70B, 405B if available)
+   - Enable **Llama 3.1** variants (8B, 70B, 405B)
+5. **Enable Mistral:**
+   - Search **"Mistral"**
+   - Enable **Mistral Medium**
 
-> **No separate Anthropic API key needed.** Claude on Vertex authenticates through your Google service account.
+> **No separate API keys needed.** All models authenticate through your Google service account.
+> **Note:** Some models may show "Deploy" instead of "Enable" — those require custom deployment (pay-per-hour). Only enable models that show "Enable" (MaaS/pay-per-token).
 
 ---
-
-## Step 4: Get xAI (Grok) API Key
-
-1. Go to **https://console.x.ai**
-2. Sign up or log in (you can use your X/Twitter account)
-3. Navigate to **API Keys**
-4. Click **Create New Key**
-5. Copy the key — it starts with `xai-...`
 
 ---
 
 ## Step 5: Install Updated Python Dependencies
 
 The `requirements.txt` has already been updated with these new packages:
-- `google-cloud-aiplatform>=1.60` — Vertex AI SDK
-- `anthropic[vertex]>=0.40` — Claude on Vertex
-- `openai>=1.30` — xAI Grok (OpenAI-compatible SDK)
+- `google-cloud-aiplatform>=1.60` — Vertex AI SDK (Gemini, Llama, Mistral)
+- `anthropic[vertex]>=0.40` — Claude on Vertex AI
 
 ```bash
 cd backend/eco_orchestrator
@@ -158,9 +166,6 @@ GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
 # Keep the old AI Studio key for backwards compatibility during migration
 GOOGLE_API_KEY=your-old-ai-studio-key-here
 
-# --- xAI (Grok) ---
-XAI_API_KEY=xai-paste-your-key-here
-
 # --- Redis ---
 REDIS_HOST=localhost
 REDIS_PORT=6379
@@ -170,11 +175,11 @@ CACHE_TTL=3600
 DEFAULT_VERTEX_REGION=us-central1
 ```
 
-> Replace `sorcer-hackathon` with your actual project ID and `xai-paste-your-key-here` with your actual xAI key.
+> Replace `sorcer-hackathon` with your actual project ID.
 
 ---
 
-## Step 7: Test All 3 Providers
+## Step 7: Test All Enabled Providers
 
 Run this test script to verify everything connects:
 
@@ -211,38 +216,35 @@ except Exception as e:
     print(f'❌ Claude failed: {e}')
 
 print()
-print('=== 3. Testing xAI (Grok) ===')
+print('=== 3. Testing Vertex AI (Llama - if enabled) ===')
 try:
-    from openai import OpenAI
-    client = OpenAI(api_key=os.getenv('XAI_API_KEY'), base_url='https://api.x.ai/v1')
-    resp = client.chat.completions.create(
-        model='grok-2',
-        messages=[{'role': 'user', 'content': 'Say hello in 5 words'}],
-        max_tokens=50
-    )
-    print(f'✅ Grok works: {resp.choices[0].message.content[:80]}')
+    import vertexai
+    from vertexai.generative_models import GenerativeModel
+    vertexai.init(project=os.getenv('GOOGLE_CLOUD_PROJECT'), location='us-central1')
+    model = GenerativeModel('meta/llama-3.1-8b-instruct')
+    resp = model.generate_content('Say hello in 5 words')
+    print(f'✅ Llama works: {resp.text[:80]}')
 except Exception as e:
-    print(f'❌ Grok failed: {e}')
+    print(f'⚠️  Llama test skipped (may require deployment): {e}')
 "
 ```
 
-All 3 should print ✅. If any fail, check:
+All enabled providers should print ✅. If any fail, check:
 - **Gemini fails:** Is billing enabled? Is `aiplatform.googleapis.com` enabled? Is `service-account.json` in the right place?
 - **Claude fails:** Did you enable Claude in Model Garden (Step 3)? Did you accept Anthropic's ToS?
-- **Grok fails:** Is your `XAI_API_KEY` correct in `.env`? Does it start with `xai-`?
+- **Llama/Mistral fails:** These may require custom deployment (not MaaS). Check Model Garden to see if they show "Deploy" vs "Enable".
 
 ---
 
 ## Step 8: Rewrite `core/llm_client.py` for Multi-Provider Regional Routing
 
-Once all 3 providers test successfully, rewrite `core/llm_client.py`:
+Once all providers test successfully, rewrite `core/llm_client.py`:
 
 ```python
 import os
 import vertexai
 from vertexai.generative_models import GenerativeModel
 from anthropic import AnthropicVertex
-from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -251,10 +253,6 @@ class LLMClient:
     def __init__(self):
         self.project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
         self.default_region = os.getenv("DEFAULT_VERTEX_REGION", "us-central1")
-        self.xai_client = OpenAI(
-            api_key=os.getenv("XAI_API_KEY"),
-            base_url="https://api.x.ai/v1"
-        )
 
     async def generate(self, prompt: str, model_id: str, region: str = None) -> str:
         """
@@ -267,9 +265,8 @@ class LLMClient:
             return await self._call_gemini(prompt, model_id, region)
         elif model_id.startswith("claude"):
             return await self._call_claude(prompt, model_id, region)
-        elif model_id.startswith("grok"):
-            return self._call_grok(prompt, model_id)
-        elif model_id.startswith("deepseek") or model_id.startswith("meta/"):
+        elif model_id.startswith("meta/") or model_id.startswith("mistral/"):
+            # Llama and Mistral via Vertex AI Model Garden
             return await self._call_vertex_partner(prompt, model_id, region)
         else:
             raise ValueError(f"Unknown model: {model_id}")
@@ -289,16 +286,9 @@ class LLMClient:
         )
         return response.content[0].text
 
-    def _call_grok(self, prompt: str, model_id: str) -> str:
-        # xAI has no regional routing — single global endpoint
-        response = self.xai_client.chat.completions.create(
-            model=model_id,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return response.choices[0].message.content
-
     async def _call_vertex_partner(self, prompt: str, model_id: str, region: str) -> str:
-        # DeepSeek, Llama via Vertex AI Model Garden
+        # Llama, Mistral via Vertex AI Model Garden
+        # Note: These may require custom deployment (not MaaS) - check Model Garden
         vertexai.init(project=self.project_id, location=region)
         model = GenerativeModel(model_id)
         response = await model.generate_content_async(prompt)
@@ -430,11 +420,10 @@ After completing all steps, verify:
 - [ ] `gcloud auth list` shows your account
 - [ ] `gcloud config get project` returns your project ID
 - [ ] `service-account.json` exists in `backend/eco_orchestrator/`
-- [ ] `.env` has all 3 keys filled in (GOOGLE_CLOUD_PROJECT, GOOGLE_APPLICATION_CREDENTIALS, XAI_API_KEY)
+- [ ] `.env` has all keys filled in (GOOGLE_CLOUD_PROJECT, GOOGLE_APPLICATION_CREDENTIALS)
 - [ ] `pip list | grep google-cloud-aiplatform` returns a version
 - [ ] `pip list | grep anthropic` returns a version
-- [ ] `pip list | grep openai` returns a version
-- [ ] Test script from Step 7 shows 3x ✅
-- [ ] `core/llm_client.py` can route to Gemini, Claude, and Grok
+- [ ] Test script from Step 7 shows ✅ for enabled providers
+- [ ] `core/llm_client.py` can route to Gemini, Claude, and partner models (Llama/Mistral)
 - [ ] `core/carbon_router.py` returns greenest region for each power level
 

@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.worker import monitor_deferred_tasks
-from app.routers import action, discovery, governance, intelligence, transparency
+from app.routers import action, discovery, governance, intelligence, transparency, test
 
 app = FastAPI(title="Carbon-Aware AI Orchestrator", version="0.1.0")
 
@@ -34,6 +34,7 @@ app.include_router(action.router)
 app.include_router(transparency.router)
 app.include_router(intelligence.router)
 app.include_router(governance.router)
+app.include_router(test.router)
 
 @app.on_event("startup")
 async def startup_event():

@@ -5,6 +5,7 @@ data/vector_store/*
 
 # Secrets
 .env
+service-account.json
 
 # Python
 __pycache__/
