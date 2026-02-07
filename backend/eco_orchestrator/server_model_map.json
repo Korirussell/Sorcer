@@ -1,0 +1,144 @@
+{
+  "northamerica-northeast1": {
+    "location": "Montréal, Canada",
+    "cfe_percent": 98,
+    "grid_cleanliness": "Pristine (Hydro)",
+    "tier": "green",
+    "available_models": [
+      {"id": "gemini-2.5-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-pro", "power_level": "medium", "provider": "google"}
+    ],
+    "coordinates": [-73.5674, 45.5019]
+  },
+  "europe-north1": {
+    "location": "Hamina, Finland",
+    "cfe_percent": 97,
+    "grid_cleanliness": "Pristine (Hydro/Wind/Nuclear)",
+    "tier": "green",
+    "available_models": [
+      {"id": "gemini-2.0-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.0-flash-lite", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-pro", "power_level": "medium", "provider": "google"}
+    ],
+    "coordinates": [27.1878, 60.5693]
+  },
+  "us-west1": {
+    "location": "The Dalles, Oregon, USA",
+    "cfe_percent": 89,
+    "grid_cleanliness": "Excellent (PNW Hydro)",
+    "tier": "green",
+    "available_models": [
+      {"id": "gemini-2.0-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.0-flash-lite", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-pro", "power_level": "medium", "provider": "google"}
+    ],
+    "coordinates": [-121.1787, 45.5946]
+  },
+  "europe-west1": {
+    "location": "St. Ghislain, Belgium",
+    "cfe_percent": 81,
+    "grid_cleanliness": "Excellent (Wind/Nuclear)",
+    "tier": "green",
+    "available_models": [
+      {"id": "gemini-2.0-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.0-flash-lite", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-pro", "power_level": "medium", "provider": "google"},
+      {"id": "claude-sonnet-4", "power_level": "medium", "provider": "anthropic"},
+      {"id": "claude-opus-4-6", "power_level": "high", "provider": "anthropic"}
+    ],
+    "coordinates": [3.8190, 50.4541]
+  },
+  "europe-west4": {
+    "location": "Eemshaven, Netherlands",
+    "cfe_percent": 80,
+    "grid_cleanliness": "Excellent (Wind/Solar)",
+    "tier": "green",
+    "available_models": [
+      {"id": "gemini-2.0-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.0-flash-lite", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-pro", "power_level": "medium", "provider": "google"}
+    ],
+    "coordinates": [6.8317, 53.4389]
+  },
+  "us-central1": {
+    "location": "Council Bluffs, Iowa, USA",
+    "cfe_percent": 59,
+    "grid_cleanliness": "Moderate (Wind/Coal/Gas Mix)",
+    "tier": "mixed",
+    "available_models": [
+      {"id": "gemini-2.0-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.0-flash-lite", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-pro", "power_level": "medium", "provider": "google"}
+    ],
+    "coordinates": [-95.8608, 41.2619]
+  },
+  "us-east4": {
+    "location": "Ashburn, Virginia, USA",
+    "cfe_percent": 34,
+    "grid_cleanliness": "Poor (PJM Grid — Coal/Gas Heavy)",
+    "tier": "dirty",
+    "available_models": [
+      {"id": "gemini-2.0-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.0-flash-lite", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-pro", "power_level": "medium", "provider": "google"}
+    ],
+    "coordinates": [-77.4875, 39.0438]
+  },
+  "us-east5": {
+    "location": "Columbus, Ohio, USA",
+    "cfe_percent": 30,
+    "grid_cleanliness": "Poor (PJM Grid — Coal/Gas Heavy)",
+    "tier": "dirty",
+    "available_models": [
+      {"id": "gemini-2.0-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.0-flash-lite", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-pro", "power_level": "medium", "provider": "google"},
+      {"id": "claude-sonnet-4", "power_level": "medium", "provider": "anthropic"},
+      {"id": "claude-opus-4-6", "power_level": "high", "provider": "anthropic"},
+      {"id": "meta/llama-4-maverick-17b-128e-instruct-maas", "power_level": "medium", "provider": "meta"},
+      {"id": "meta/llama-4-scout-17b-16e-instruct-maas", "power_level": "low", "provider": "meta"}
+    ],
+    "coordinates": [-82.9988, 39.9612]
+  },
+  "us-west4": {
+    "location": "Las Vegas, Nevada, USA",
+    "cfe_percent": 22,
+    "grid_cleanliness": "Terrible (NV Energy — Gas/Coal)",
+    "tier": "dirty",
+    "available_models": [
+      {"id": "gemini-2.0-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.0-flash-lite", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-pro", "power_level": "medium", "provider": "google"}
+    ],
+    "coordinates": [-115.1398, 36.1699]
+  },
+  "asia-northeast1": {
+    "location": "Tokyo, Japan",
+    "cfe_percent": 38,
+    "grid_cleanliness": "Poor (Mixed Fossil/Nuclear)",
+    "tier": "dirty",
+    "available_models": [
+      {"id": "gemini-2.5-flash", "power_level": "low", "provider": "google"},
+      {"id": "gemini-2.5-pro", "power_level": "medium", "provider": "google"}
+    ],
+    "coordinates": [139.6917, 35.6895]
+  },
+  "asia-southeast1": {
+    "location": "Singapore",
+    "cfe_percent": 3,
+    "grid_cleanliness": "Terrible (Almost Entirely Fossil Fuel)",
+    "tier": "dirty",
+    "available_models": [
+      {"id": "gemini-2.5-flash", "power_level": "low", "provider": "google"}
+    ],
+    "coordinates": [103.8198, 1.3521]
+  }
+}
