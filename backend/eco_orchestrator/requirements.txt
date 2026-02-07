@@ -19,6 +19,8 @@ codecarbon
 requests
 
 # --- Data & Caching ---
+redis
+asyncpg
 chromadb==0.4.24
 
 # --- Utilities ---
