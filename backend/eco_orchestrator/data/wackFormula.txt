@@ -1,0 +1,52 @@
+To estimate the current carbon intensity ($gCO_2/kWh$) using only a percentile rank and a yearly average, we have to bridge the gap between a relative position and an absolute value.
+Since the yearly average tells us the "center of gravity" of the grid and the percentile tells us where we are in the stack of historical performance, the calculation requires us to assume (or calculate) the distribution shape of that specific grid’s intensity.
+The Calculation Walkthrough
+To perform this estimation, you follow a four-step statistical "re-mapping" process.
+1. Establish the Baseline (Yearly Average)
+The yearly average ($\mu$) is your starting point. However, in power grids, the mean (average) is often higher than the median (50th percentile) because carbon intensity is frequently "right-skewed"—meaning a few extremely "dirty" hours (peaker plants running during heatwaves) pull the average up.
+2. Determine the Variability Coefficient ($C_v$)
+You cannot map a percentile to a value without knowing how "wide" the distribution is. For example, a grid powered by nuclear and hydro (like europe-west6 Zürich) has very low variability, while a grid with high wind penetration (like europe-west2 London) swings wildly.
+Highly Variable Grid: $\sigma \approx 0.5 \times \mu$ (50% fluctuation)
+Stable Grid: $\sigma \approx 0.1 \times \mu$ (10% fluctuation)
+3. Calculate the Z-Score
+The "percentile" ($P$) is the area under the probability curve. We convert this into a Z-score ($z$), which represents how many standard deviations the current moment is from the mean.
+For a 90th percentile (a "dirty" hour), the $z$ is approximately $+1.28$.
+For a 10th percentile (a "clean" hour), the $z$ is approximately $-1.28$.
+4. The Estimation Formula
+Using the standard normal distribution as a proxy, the estimated current intensity ($I_{curr}$) is:
+$$I_{curr} = \mu + (z_P \times \sigma)$$
+Or, if you only have the variability coefficient ($C_v$):
+$$I_{curr} = \mu \times (1 + z_P \cdot C_v)$$
+Step-by-Step Example: Tokyo (asia-northeast1)
+Yearly Average ($\mu$): $453 \, gCO_2/kWh$ (from your table).
+Scenario: The API says Tokyo is currently at its 20th percentile (it’s a very clean hour).
+Assumed Variability: $25\%$ ($C_v = 0.25$).
+Find Z-score for 20th percentile: Using a standard table or scipy.stats.norm.ppf(0.20), $z \approx -0.84$.
+Apply Formula:
+$$I_{curr} = 453 \times (1 + (-0.84 \times 0.25))$$
+$$I_{curr} = 453 \times (1 - 0.21) = 453 \times 0.79$$
+Estimated Current Intensity: $358 \, gCO_2/kWh$.
+Refinement: Why Linear Mapping Fails
+You might be tempted to just do a linear interpolation between a "Min" and "Max," but carbon intensity usually follows a Beta Distribution or Log-Normal Distribution.
+As shown in the curve above, the "distance" in $gCO_2$ between the 90th and 95th percentile is usually much larger than the distance between the 45th and 50th. This is why having a "percentile" is actually more useful than a raw value for carbon-aware scheduling—it tells you how much of the "clean energy window" you are actually capturing compared to the rest of the year.
+Summary Table for Estimation
+If you don't want to run complex stats, you can use these "Rule of Thumb" multipliers based on the percentile:
+Percentile
+Description
+Estimated Multiplier (Icurr​/μ)
+5%
+Deep Green (Peak Solar/Wind)
+0.4x to 0.6x
+25%
+Clean Running
+0.8x
+50%
+Typical Median
+~0.95x (Usually slightly below mean)
+75%
+Carbon Heavy
+1.2x
+95%
+Peak Dirty (Coal/Gas Ramping)
+1.5x to 2.0x
+Would you like me to write a Python function that uses these Google Cloud regions to automate this estimation for your batch jobs?
