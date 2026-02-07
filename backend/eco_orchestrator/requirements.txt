@@ -10,6 +10,7 @@ pydantic-settings
 
 # --- AI & Orchestration ---
 google-genai
+google-generativeai
 langgraph
 langchain-google-genai
 tiktoken
@@ -19,6 +20,8 @@ codecarbon
 requests
 
 # --- Data & Caching ---
+redis
+asyncpg
 chromadb==0.4.24
 
 # --- Utilities ---

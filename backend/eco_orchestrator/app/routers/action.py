@@ -1,10 +1,11 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel
 
 from core.orchestrator import EcoOrchestrator
+from core.receipt_store import set_receipt as store_receipt
 
 router = APIRouter(tags=["action"])
 orchestrator = EcoOrchestrator()
@@ -46,12 +47,66 @@ async def orchestrate(req: OrchestrateRequest):
 
 @router.post("/deferred/execute/{task_id}")
 async def deferred_execute(task_id: str):
-    resp = {
-        "status": "processing",
-        "new_eta": "2026-02-07T05:00:00Z",
-        "current_grid_intensity": 140.2,
+    try:
+        task_id_int = int(task_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="task_id must be an integer")
+
+    try:
+        task = await orchestrator.db.get_task_by_id(task_id_int)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    if task is None or task.get("status") != "deferred":
+        raise HTTPException(status_code=404, detail="Task not found or already completed")
+
+    try:
+        prompt_text = task["prompt"]
+        model_tier = task["model_tier"]
+        raw_response = await orchestrator.client.generate(prompt_text, model_tier)
+    except Exception:
+        raise HTTPException(status_code=503, detail="LLM call failed")
+
+    comp = orchestrator.compressor.compress(prompt_text)
+    grid_intensity = 100.0
+    impact = orchestrator.logger.calculate_savings(
+        {
+            "original_tokens": comp["original_count"],
+            "final_tokens": comp["final_count"],
+            "model": model_tier,
+        },
+        grid_intensity,
+    )
+
+    try:
+        await orchestrator.db.complete_task(task_id_int, raw_response, impact)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Failed to complete task in database")
+
+    receipt_id = f"rec_deferred_{task_id}"
+    store_receipt(
+        receipt_id,
+        {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "server_location": "us-central1 (Iowa)",
+            "model_used": model_tier,
+            "baseline_co2_est": impact.get("baseline_co2", 4.2),
+            "actual_co2": impact.get("actual_co2", 1.8),
+            "net_savings": impact.get("co2_saved_grams", 2.4),
+            "was_cached": False,
+            "energy_kwh": impact.get("energy_kwh", 0.004),
+            "grid_source": {"wind": 60, "solar": 22, "gas": 18},
+        },
+    )
+
+    return {
+        "status": "complete",
+        "new_eta": datetime.utcnow().isoformat() + "Z",
+        "current_grid_intensity": grid_intensity,
+        "response": raw_response,
+        "receipt_id": receipt_id,
+        "eco_stats": impact,
     }
-    return resp
 
 
 @router.post("/bypass")

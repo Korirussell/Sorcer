@@ -16,6 +16,18 @@ class EcoDatabase:
         await conn.close()
         return task_id
 
+    async def get_task_by_id(self, task_id: int):
+        """Fetch a single task by id. Returns dict with prompt, model_tier, etc. or None."""
+        conn = await asyncpg.connect(self.dsn)
+        row = await conn.fetchrow(
+            "SELECT id, prompt, model_tier, deadline, target_intensity, status FROM tasks WHERE id = $1",
+            task_id,
+        )
+        await conn.close()
+        if row is None:
+            return None
+        return dict(row)
+
     async def get_runnable_tasks(self, current_intensity):
         conn = await asyncpg.connect(self.dsn)
         # Select tasks that are green-ready OR passed their hard deadline

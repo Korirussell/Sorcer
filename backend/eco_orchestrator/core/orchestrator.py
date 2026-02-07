@@ -46,15 +46,19 @@ class EcoOrchestrator:
         triage = self.scorer.score(comp["compressed_text"])
         tier = triage["tier"]
 
-        # 3: Grid + optional deferral
-        grid_intensity = 450.0  # Placeholder
+        # 3: Grid + optional deferral (non-fatal: if DB unavailable, run immediately)
+        grid_intensity = 100.0  # Placeholder – below threshold so we run now until real grid infra
         GRID_THRESHOLD = 200
         deadline = getattr(req, "deadline", None) or (datetime.utcnow() + timedelta(hours=24))
         if not getattr(req, "is_urgent", False) and grid_intensity > GRID_THRESHOLD:
-            task_id = await self.db.add_task_to_queue(
-                comp["compressed_text"], tier, deadline, GRID_THRESHOLD
-            )
-            return {"status": "deferred", "task_id": str(task_id), "message": "Queued for green window."}
+            try:
+                task_id = await self.db.add_task_to_queue(
+                    comp["compressed_text"], tier, deadline, GRID_THRESHOLD
+                )
+                return {"status": "deferred", "task_id": str(task_id), "message": "Queued for green window."}
+            except Exception:
+                # DB down or tables missing: run immediately instead of failing
+                pass
 
         # 4: Execute
         raw_response = await self.client.generate(comp["compressed_text"], tier)
