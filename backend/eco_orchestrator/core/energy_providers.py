@@ -1,5 +1,5 @@
 """
-WattTime API client.
+WattTime + Electricity Maps API clients.
 Raw HTTP calls and parsing into Redis-ready canonical format.
 """
 import os
@@ -194,38 +194,160 @@ def parse_watttime_response(raw: dict) -> dict:
     }
 
 
-# ---------- Green Web Foundation IP-to-CO2 ----------
+# ---------- Electricity Maps API ----------
 
-GWF_BASE = "https://api.thegreenwebfoundation.org/api/v3/ip-to-co2intensity"
+EMAPS_BASE = "https://api.electricitymap.org/v3"
 
 
-def fetch_gwf_co2_intensity(ip: str) -> dict | None:
+def _get_emaps_token() -> str | None:
+    """Read Electricity Maps API token from env."""
+    return os.getenv("ELECTRICITYMAPS_TOKEN")
+
+
+def fetch_emaps_latest(zone: str) -> dict | None:
     """
-    Fetch annual-average carbon intensity for an IP address via the
-    Green Web Foundation API.  Free, no auth required.
-
-    Returns dict with country_name, carbon_intensity (g/kWh),
-    generation_from_fossil (%), data year, etc.
+    Fetch the latest real-time carbon intensity for a zone.
+    Returns carbon intensity (gCO2eq/kWh), fossil fuel %, renewable %, etc.
+    Docs: https://docs.electricitymaps.com
     """
+    token = _get_emaps_token()
+    if not token:
+        return None
     try:
         r = requests.get(
-            f"{GWF_BASE}/{ip}",
-            headers={"accept": "application/json"},
+            f"{EMAPS_BASE}/carbon-intensity/latest",
+            headers={"auth-token": token},
+            params={"zone": zone},
             timeout=10,
         )
         r.raise_for_status()
         data = r.json()
         return {
-            "country_name": data.get("country_name"),
-            "country_code": data.get("country_code_iso_2"),
-            "carbon_intensity_g_per_kwh": data.get("carbon_intensity"),
-            "generation_from_fossil_pct": data.get("generation_from_fossil"),
-            "carbon_intensity_type": data.get("carbon_intensity_type"),
-            "data_year": data.get("year"),
-            "checked_ip": data.get("checked_ip"),
+            "zone": data.get("zone"),
+            "carbon_intensity_g_per_kwh": data.get("carbonIntensity"),
+            "datetime": data.get("datetime"),
+            "updated_at": data.get("updatedAt"),
+            "emission_factor_type": data.get("emissionFactorType"),
+            "is_estimated": data.get("isEstimated", False),
+            "estimation_method": data.get("estimationMethod"),
         }
     except requests.RequestException:
         return None
+
+
+def fetch_emaps_power_breakdown(zone: str) -> dict | None:
+    """
+    Fetch the latest power generation breakdown for a zone.
+    Returns MW values for each fuel type + fossil/renewable percentages.
+    """
+    token = _get_emaps_token()
+    if not token:
+        return None
+    try:
+        r = requests.get(
+            f"{EMAPS_BASE}/power-breakdown/latest",
+            headers={"auth-token": token},
+            params={"zone": zone},
+            timeout=10,
+        )
+        r.raise_for_status()
+        data = r.json()
+        return {
+            "zone": data.get("zone"),
+            "datetime": data.get("datetime"),
+            "fossil_free_pct": data.get("fossilFreePercentage"),
+            "renewable_pct": data.get("renewablePercentage"),
+            "power_consumption_total": data.get("powerConsumptionTotal"),
+            "power_production_total": data.get("powerProductionTotal"),
+            "power_consumption_breakdown": data.get("powerConsumptionBreakdown"),
+            "power_production_breakdown": data.get("powerProductionBreakdown"),
+        }
+    except requests.RequestException:
+        return None
+
+
+def fetch_emaps_zones() -> dict | None:
+    """
+    Fetch the list of all available Electricity Maps zones.
+    Returns dict keyed by zone code with zone name and country info.
+    """
+    token = _get_emaps_token()
+    if not token:
+        return None
+    try:
+        r = requests.get(
+            f"{EMAPS_BASE}/zones",
+            headers={"auth-token": token},
+            timeout=10,
+        )
+        r.raise_for_status()
+        return r.json()
+    except requests.RequestException:
+        return None
+
+
+# ---------- Combined Snapshot (Redis-ready) ----------
+
+
+def build_region_snapshot(
+    em_intensity: dict | None,
+    em_breakdown: dict | None,
+    wt_index: dict | None,
+    wt_forecast: dict | None,
+) -> dict:
+    """
+    Merge Electricity Maps + WattTime data into a single flat dict
+    ready to be stored in Redis as JSON.
+
+    Redis key pattern:  grid:{zone}
+    Redis TTL:          300s (5 min)
+    """
+    snapshot: dict[str, Any] = {}
+
+    # --- Electricity Maps fields (primary) ---
+    if em_intensity:
+        snapshot["zone"] = em_intensity.get("zone")
+        snapshot["carbon_intensity_g_per_kwh"] = em_intensity.get("carbon_intensity_g_per_kwh")
+        snapshot["emission_factor_type"] = em_intensity.get("emission_factor_type")
+        snapshot["is_estimated"] = em_intensity.get("is_estimated")
+        snapshot["datetime"] = em_intensity.get("datetime")
+        snapshot["updated_at"] = em_intensity.get("updated_at")
+
+    if em_breakdown:
+        snapshot["fossil_free_pct"] = em_breakdown.get("fossil_free_pct")
+        snapshot["renewable_pct"] = em_breakdown.get("renewable_pct")
+        snapshot["power_consumption_mw"] = em_breakdown.get("power_consumption_total")
+        snapshot["power_production_mw"] = em_breakdown.get("power_production_total")
+        snapshot["consumption_breakdown"] = em_breakdown.get("power_consumption_breakdown")
+        snapshot["production_breakdown"] = em_breakdown.get("power_production_breakdown")
+
+    # --- WattTime fields (appended) ---
+    if wt_index:
+        snapshot["watttime_region"] = wt_index.get("region")
+        snapshot["watttime_percentile"] = wt_index.get("percentile")
+        snapshot["watttime_timestamp"] = wt_index.get("timestamp")
+
+    if wt_forecast:
+        snapshot["watttime_moer_lbs_per_mwh"] = wt_forecast.get("moer_lbs_per_mwh")
+        snapshot["watttime_co2_g_per_kwh"] = wt_forecast.get("co2_g_per_kwh")
+
+    snapshot["fetched_at"] = _now_iso()
+    return snapshot
+
+
+def fetch_region_snapshot(em_zone: str, wt_region: str) -> dict:
+    """
+    One-call convenience: fetch both APIs for a region and return
+    the combined Redis-ready snapshot.
+    """
+    wt_token = _get_watttime_token()
+
+    em_ci = fetch_emaps_latest(em_zone)
+    em_pb = fetch_emaps_power_breakdown(em_zone)
+    wt_idx = fetch_watttime_index(wt_region, wt_token)
+    wt_fc = fetch_watttime_forecast(wt_region, wt_token)
+
+    return build_region_snapshot(em_ci, em_pb, wt_idx, wt_fc)
 
 
 def _now_iso() -> str:
