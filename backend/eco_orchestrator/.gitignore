@@ -1,0 +1,13 @@
+# Created at runtime
+data/ledger.db
+data/vector_store/*
+!data/vector_store/.gitkeep
+
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
