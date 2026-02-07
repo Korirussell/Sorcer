@@ -3,7 +3,7 @@ from core.classifier import ComplexityScorer
 from core.llm_client import LLMClient
 from core.logger import GreenLogger
 from core.cache import cache
-
+from core.database import EcoDatabase
 class EcoOrchestrator:
     def __init__(self):
         self.compressor = EcoCompressor()
@@ -12,6 +12,8 @@ class EcoOrchestrator:
         self.logger = GreenLogger()
         self.ledger = {} # Dummy DB for receipt_id lookup
         self.cache = cache()
+        self.db = EcoDatabase() 
+        
 
     async def process(self, req):
 
@@ -32,11 +34,17 @@ class EcoOrchestrator:
         
         # 2. Triage
         triage = self.scorer.score(comp['compressed_text'])
-        
+        tier = triage['tier']
         # 3. Get Grid (Your "Boy's" logic)
         grid_intensity = 450.0 # Placeholder
-        
+        GRID_THRESHOLD = 200
+        if not req.is_urgent and grid_intensity > GRID_THRESHOLD:
+            task_id = await self.db.add_task_to_queue(
+                comp['compressed_text'], tier, req.deadline, GRID_THRESHOLD
+            )
+            return {"status": "deferred", "task_id": str(task_id), "message": "Queued for green window."}
         # 4. Execute
+        
         raw_response = await self.client.generate(comp['compressed_text'], triage['tier'])
         
         # 5. Log & Generate Receipt

@@ -1,22 +1,31 @@
-'''
-big Braylon 
-
-we are going to need two caches in here...
-
-we will have a method something like: 
-
-check_hash_cache(prompt):
-    hash = hash_ts(prompt)
-    if hash in cache:
-        return data from cache for this
+"""
+In-memory cache placeholder. Later: hash cache + semantic (vector) cache.
+"""
 
 
-check_semantic_cache(prmopt):
-    vector = vectorize(prompt)
-    if vector in vector_db:
-        return data from cache
+class cache:
+    """Minimal cache so orchestrator can instantiate. Returns None = cache miss."""
 
-check_if_prompt_is_in_cache(prompt):
-    if prompt in either of these two caches, return the saved results
-'''
+    def __init__(self):
+        self._hash_store = {}
+        self._semantic_store = []
 
+    def check_hash_cache(self, prompt: str):
+        """If exact prompt hash is cached, return saved result; else None."""
+        key = str(hash(prompt))
+        return self._hash_store.get(key)
+
+    def check_semantic_cache(self, prompt: str):
+        """Placeholder: no vector DB yet. Returns None."""
+        return None
+
+    def check_if_prompt_is_in_cache(self, prompt: str):
+        """Check both caches. Return saved result dict or None."""
+        out = self.check_hash_cache(prompt)
+        if out is not None:
+            return out
+        return self.check_semantic_cache(prompt)
+
+    def set_hash_cache(self, prompt: str, result: dict):
+        """Store result for exact prompt hash."""
+        self._hash_store[str(hash(prompt))] = result

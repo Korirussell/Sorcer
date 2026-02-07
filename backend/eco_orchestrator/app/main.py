@@ -1,6 +1,8 @@
 # API Entry point & Routes
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.worker import monitor_deferred_tasks
+import asyncio
 
 from app.routers import action, discovery, governance, intelligence, transparency
 
@@ -21,6 +23,10 @@ app.include_router(transparency.router)
 app.include_router(intelligence.router)
 app.include_router(governance.router)
 
+@app.on_event("startup")
+async def startup_event():
+    # create_task runs the worker loop without blocking the API
+    asyncio.create_task(monitor_deferred_tasks())
 
 @app.get("/health")
 def health():
