@@ -7,6 +7,10 @@ _package_root = Path(__file__).resolve().parent.parent
 if str(_package_root) not in sys.path:
     sys.path.insert(0, str(_package_root))
 
+# Load .env so GOOGLE_API_KEY etc. are set before any core code runs
+from dotenv import load_dotenv
+load_dotenv(_package_root / ".env")
+
 import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
