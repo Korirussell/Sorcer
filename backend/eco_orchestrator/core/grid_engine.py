@@ -1,6 +1,8 @@
 # Grid engine: orchestrates API calls, caching, and region selection.
+import os
 from typing import Any
 
+from core.redis import RedisCache
 from core.energy_providers import (
     fetch_region_snapshot,
     build_region_snapshot,
@@ -11,25 +13,32 @@ from core.energy_providers import (
     get_watttime_token,
 )
 
-# Cache TTL in seconds.  Will be used as Redis EX value.
-GRID_CACHE_TTL_SECONDS = 300  # 5 minutes
-
-# Redis key prefix for grid snapshots
+# Cache config (override via env)
+GRID_CACHE_TTL = int(os.getenv("GRID_CACHE_TTL", 300))   # 5 minutes
 GRID_KEY_PREFIX = "grid:"
 
+# Module-level Redis instance.  If Redis is down the wrapper
+# returns None / False for every operation — the app still works,
+# it just hits the APIs every time.
+_redis = RedisCache(
+    host=os.getenv("REDIS_HOST", "localhost"),
+    port=int(os.getenv("REDIS_PORT", 6379)),
+    default_ttl=GRID_CACHE_TTL,
+)
+
 
 # ------------------------------------------------------------------
-# Cache layer (stubs until Redis is wired in)
+# Cache helpers
 # ------------------------------------------------------------------
 
-def _cache_get(key: str) -> dict | None:
-    """Fetch a cached snapshot by key.  Stub: always misses."""
-    return None
+def _cache_get(zone: str) -> dict | None:
+    """Try to pull a cached snapshot for a zone."""
+    return _redis.get(f"{GRID_KEY_PREFIX}{zone}")
 
 
-def _cache_set(key: str, data: dict, ttl: int = GRID_CACHE_TTL_SECONDS) -> None:
-    """Store a snapshot in cache.  Stub: no-op."""
-    pass
+def _cache_set(zone: str, data: dict) -> bool:
+    """Store a snapshot in Redis with the grid TTL."""
+    return _redis.set(f"{GRID_KEY_PREFIX}{zone}", data, ttl=GRID_CACHE_TTL)
 
 
 # ------------------------------------------------------------------
@@ -39,35 +48,29 @@ def _cache_set(key: str, data: dict, ttl: int = GRID_CACHE_TTL_SECONDS) -> None:
 def get_region_data(em_zone: str, wt_region: str) -> dict:
     """
     Return the combined EM + WT snapshot for a single region.
-    Checks cache first; on miss fetches live and stores.
+    Cache-aware: checks Redis first, fetches live on miss.
     """
-    cache_key = f"{GRID_KEY_PREFIX}{em_zone}"
-
-    cached = _cache_get(cache_key)
+    cached = _cache_get(em_zone)
     if cached is not None:
+        cached["_from_cache"] = True
         return cached
 
     snapshot = fetch_region_snapshot(em_zone, wt_region)
-    _cache_set(cache_key, snapshot)
+    _cache_set(em_zone, snapshot)
     return snapshot
 
 
 def get_multi_region_data(regions: list[dict[str, str]]) -> list[dict]:
     """
     Fetch snapshots for multiple regions.
-    Each item in `regions` must have keys: em_zone, wt_region.
-    Returns a list of flat Redis-ready dicts.
+    Each item must have keys: em_zone, wt_region.
     """
-    results: list[dict] = []
-    for r in regions:
-        snapshot = get_region_data(r["em_zone"], r["wt_region"])
-        results.append(snapshot)
-    return results
+    return [get_region_data(r["em_zone"], r["wt_region"]) for r in regions]
 
 
 def get_grid_carbon(em_zone: str, wt_region: str) -> dict:
     """
-    Simplified accessor that returns just the key carbon metrics
+    Simplified accessor — returns just the key carbon metrics
     for a region.  Used by intelligence.py for server selection.
     """
     snap = get_region_data(em_zone, wt_region)
@@ -83,12 +86,12 @@ def get_grid_carbon(em_zone: str, wt_region: str) -> dict:
 
 def get_grid_map() -> dict:
     """
-    Get grid map overview for the /grid/map endpoint.
-    Returns snapshots for a default set of regions.
+    Grid map overview for the /grid/map endpoint.
+    Returns snapshots for a default set of US regions.
     """
-    cached = _cache_get(f"{GRID_KEY_PREFIX}__map__")
-    if cached is not None:
-        return cached
+    map_cache = _redis.get(f"{GRID_KEY_PREFIX}__map__")
+    if map_cache is not None:
+        return map_cache
 
     default_regions = [
         {"em_zone": "US-CAL-CISO",  "wt_region": "CAISO_NORTH"},
@@ -100,5 +103,5 @@ def get_grid_map() -> dict:
 
     snapshots = get_multi_region_data(default_regions)
     resp = {"regions": snapshots}
-    _cache_set(f"{GRID_KEY_PREFIX}__map__", resp)
+    _redis.set(f"{GRID_KEY_PREFIX}__map__", resp, ttl=GRID_CACHE_TTL)
     return resp

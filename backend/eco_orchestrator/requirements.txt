@@ -20,6 +20,7 @@ requests
 
 # --- Data & Caching ---
 redis
+redisvl
 asyncpg
 chromadb==0.4.24
 
