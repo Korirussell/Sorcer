@@ -10,7 +10,6 @@ pydantic-settings
 
 # --- AI & Orchestration ---
 google-genai
-google-generativeai
 langgraph
 langchain-google-genai
 tiktoken
