@@ -80,8 +80,8 @@ export function SorcerSidebar({ isOpen, onClose, onCollapse }: SidebarProps) {
               <Image
                 src="/images/logo.png"
                 alt="Sorcer"
-                width={32}
-                height={32}
+                width={60}
+                height={60}
                 className="object-contain"
               />
             </div>

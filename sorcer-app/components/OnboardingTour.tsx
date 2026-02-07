@@ -93,15 +93,25 @@ export function OnboardingTour() {
 
   const current = TOUR_STEPS[step];
 
-  // Calculate tooltip position
+  // Calculate tooltip position — clamp horizontally so the tooltip
+  // never overflows the left or right edge of the viewport.
+  const TOOLTIP_WIDTH = 288; // w-72 = 18rem = 288px
+  const EDGE_PADDING = 12;
+
   let tooltipStyle: React.CSSProperties = {};
   if (rect) {
+    const clampX = (centerX: number) =>
+      Math.min(
+        Math.max(EDGE_PADDING, centerX - TOOLTIP_WIDTH / 2),
+        window.innerWidth - TOOLTIP_WIDTH - EDGE_PADDING
+      );
+
     switch (current.position) {
       case "bottom":
-        tooltipStyle = { top: rect.bottom + 12, left: rect.left + rect.width / 2, transform: "translateX(-50%)" };
+        tooltipStyle = { top: rect.bottom + 12, left: clampX(rect.left + rect.width / 2) };
         break;
       case "top":
-        tooltipStyle = { bottom: window.innerHeight - rect.top + 12, left: rect.left + rect.width / 2, transform: "translateX(-50%)" };
+        tooltipStyle = { bottom: window.innerHeight - rect.top + 12, left: clampX(rect.left + rect.width / 2) };
         break;
       case "right":
         tooltipStyle = { top: rect.top + rect.height / 2, left: rect.right + 12, transform: "translateY(-50%)" };
