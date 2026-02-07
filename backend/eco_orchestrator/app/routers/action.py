@@ -22,7 +22,13 @@ class OrchestrateRequest(BaseModel):
 
 @router.post("/orchestrate")
 async def orchestrate(req: OrchestrateRequest):
-    results = await orchestrator.process(req)
+    try:
+        results = await orchestrator.process(req)
+    except RuntimeError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=str(e) or "LLM unavailable (check API key and quota)",
+        )
 
     if results.get("status") == "deferred":
         return {

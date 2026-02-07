@@ -1,9 +1,17 @@
 # API Entry point & Routes
+import sys
+from pathlib import Path
+
+# Ensure package root is on path so app/core resolve when run from repo root
+_package_root = Path(__file__).resolve().parent.parent
+if str(_package_root) not in sys.path:
+    sys.path.insert(0, str(_package_root))
+
+import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.worker import monitor_deferred_tasks
-import asyncio
 
+from app.worker import monitor_deferred_tasks
 from app.routers import action, discovery, governance, intelligence, transparency
 
 app = FastAPI(title="Carbon-Aware AI Orchestrator", version="0.1.0")
