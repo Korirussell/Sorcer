@@ -10,6 +10,9 @@ pydantic-settings
 
 # --- AI & Orchestration ---
 google-genai
+google-cloud-aiplatform>=1.60     # Vertex AI SDK (regional Gemini + partner models)
+anthropic[vertex]>=0.40           # Claude on Vertex AI
+openai>=1.30                      # xAI Grok (OpenAI-compatible)
 langgraph
 langchain-google-genai
 tiktoken
