@@ -16,7 +16,7 @@ def get_receipt(receipt_id: str) -> dict[str, Any] | None:
 
 
 def get_nutrition(receipt_id: str) -> dict[str, Any] | None:
-    """Return nutrition-label shape from stored receipt or None."""
+    """Return nutrition-label shape from stored receipt or None (hero metric: efficiency_multiplier)."""
     r = _store.get(receipt_id)
     if not r:
         return None
@@ -26,4 +26,11 @@ def get_nutrition(receipt_id: str) -> dict[str, Any] | None:
         "og_co2": r.get("baseline_co2_est", r.get("baseline_co2", 4.2)),
         "end_co2": r.get("actual_co2", 1.8),
         "net_savings": r.get("net_savings", 2.4),
+        "efficiency_multiplier": r.get("efficiency_multiplier"),
+        "wh_saved": r.get("wh_saved"),
     }
+
+
+def get_all_receipts() -> list[dict[str, Any]]:
+    """Return all stored receipts for aggregation (e.g. total_user_savings_g)."""
+    return list(_store.values())

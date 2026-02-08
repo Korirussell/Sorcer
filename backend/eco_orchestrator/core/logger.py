@@ -1,7 +1,10 @@
+import os
+
+
 class GreenLogger:
     def __init__(self):
-        self.WH_PER_TOKEN_PRO = 0.01  # Energy cost for Gemini Pro
-        self.WH_PER_TOKEN_FLASH = 0.001 # Energy cost for Gemini Flash
+        self.WH_PER_TOKEN_PRO = float(os.getenv("WH_PER_TOKEN_PRO", "0.01"))  # Energy cost for Gemini Pro
+        self.WH_PER_TOKEN_FLASH = float(os.getenv("WH_PER_TOKEN_FLASH", "0.001"))  # Energy cost for Gemini Flash
 
     def calculate_savings(self, stats: dict, grid_intensity: float):
         """

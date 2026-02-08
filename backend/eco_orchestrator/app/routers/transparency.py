@@ -8,10 +8,12 @@ router = APIRouter(tags=["transparency"])
 STUB_RECEIPT = {
     "timestamp": "ISO-TIMESTAMP",
     "server_location": "us-central1 (Iowa)",
-    "model_used": "gemini-1.5-flash",
+    "model_used": "gemini-2.0-flash",
     "baseline_co2_est": 4.2,
     "actual_co2": 1.8,
     "net_savings": 2.4,
+    "efficiency_multiplier": 12.8,
+    "wh_saved": 0.159,
     "was_cached": False,
 }
 STUB_NUTRITION = {
@@ -20,6 +22,8 @@ STUB_NUTRITION = {
     "og_co2": 4.2,
     "end_co2": 1.8,
     "net_savings": 2.4,
+    "efficiency_multiplier": 12.8,
+    "wh_saved": 0.159,
 }
 
 

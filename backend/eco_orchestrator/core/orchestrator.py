@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta
 
 from core.compression import EcoCompressor
@@ -54,8 +55,8 @@ class EcoOrchestrator:
         grid_source = grid_data["grid_source"]
         grid_zone = grid_data.get("zone", "unknown")
         grid_source_label = grid_data.get("_source", "?")
-        logger.info(f"Orchestrator grid | zone={grid_zone} | intensity={grid_intensity} g/kWh | source={grid_source_label} | defer_threshold=200")
-        GRID_THRESHOLD = 200
+        GRID_THRESHOLD = int(os.getenv("GRID_THRESHOLD", "200"))
+        logger.info(f"Orchestrator grid | zone={grid_zone} | intensity={grid_intensity} g/kWh | source={grid_source_label} | defer_threshold={GRID_THRESHOLD}")
         deadline = getattr(req, "deadline", None) or (datetime.utcnow() + timedelta(hours=24))
         if not getattr(req, "is_urgent", False) and grid_intensity > GRID_THRESHOLD:
             try:
@@ -89,10 +90,13 @@ class EcoOrchestrator:
             {
                 "timestamp": datetime.utcnow().isoformat() + "Z",
                 "server_location": "us-central1 (Iowa)",
+                "grid_zone": grid_zone,
                 "model_used": tier,
                 "baseline_co2_est": impact.get("baseline_co2", 4.2),
                 "actual_co2": impact.get("actual_co2", 1.8),
                 "net_savings": impact.get("co2_saved_grams", 2.4),
+                "efficiency_multiplier": impact.get("efficiency_multiplier"),
+                "wh_saved": impact.get("wh_saved"),
                 "was_cached": False,
                 "energy_kwh": impact.get("energy_kwh", 0.004),
                 "grid_source": grid_source,

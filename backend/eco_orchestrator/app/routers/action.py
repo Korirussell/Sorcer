@@ -93,15 +93,19 @@ async def deferred_execute(task_id: str):
         raise HTTPException(status_code=503, detail="Failed to complete task in database")
 
     receipt_id = f"rec_deferred_{task_id}"
+    grid_zone = grid_data.get("zone", "unknown")
     store_receipt(
         receipt_id,
         {
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "server_location": "us-central1 (Iowa)",
+            "grid_zone": grid_zone,
             "model_used": model_tier,
             "baseline_co2_est": impact.get("baseline_co2", 4.2),
             "actual_co2": impact.get("actual_co2", 1.8),
             "net_savings": impact.get("co2_saved_grams", 2.4),
+            "efficiency_multiplier": impact.get("efficiency_multiplier"),
+            "wh_saved": impact.get("wh_saved"),
             "was_cached": False,
             "energy_kwh": impact.get("energy_kwh", 0.004),
             "grid_source": grid_source,
@@ -120,9 +124,26 @@ async def deferred_execute(task_id: str):
 
 @router.post("/bypass")
 async def bypass(prompt: str = Body(..., embed=True)):
-    resp = {
-        "response": f"Direct response for: {prompt}",
-        "warning": "No CO2 savings applied",
-        "potential_savings_lost": "1.4g",
+    """Direct LLM access without eco optimizations. Computes potential_savings_lost vs orchestrate."""
+    try:
+        raw_response = await orchestrator.client.raw_llm_generate(prompt, "gemini-2.0-flash")
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e) or "LLM unavailable")
+
+    comp = orchestrator.compressor.compress(prompt)
+    grid_data = get_default_grid_data()
+    grid_intensity = grid_data["carbon_intensity_g_per_kwh"]
+    original_tokens = comp["original_count"]
+    final_tokens = comp["final_count"]
+
+    # Bypass: full prompt to Flash. Orchestrate would have: compressed prompt to Flash.
+    wh_per_token_flash = orchestrator.logger.WH_PER_TOKEN_FLASH
+    bypass_co2 = (original_tokens * wh_per_token_flash / 1000) * grid_intensity
+    orchestrate_co2 = (final_tokens * wh_per_token_flash / 1000) * grid_intensity
+    potential_savings_lost = round(bypass_co2 - orchestrate_co2, 4)
+
+    return {
+        "response": raw_response,
+        "warning": "No CO2 savings applied (bypass mode)",
+        "potential_savings_lost_g": potential_savings_lost,
     }
-    return resp
