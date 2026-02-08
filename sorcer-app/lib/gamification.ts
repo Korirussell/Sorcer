@@ -1,4 +1,5 @@
-import type { Badge, UserStats, LeaderboardEntry } from "@/types/gamification";
+import type { Badge, UserStats, LeaderboardEntry, ImpactStats } from "@/types/gamification";
+import { getAllChats, getMessages } from "@/lib/localChatStore";
 
 // ─── Score Calculation ───────────────────────────────────────────────────────
 
@@ -145,3 +146,49 @@ export const MOCK_LEADERBOARD: LeaderboardEntry[] = [
   { userId: "u19", name: "Wanderer", avatar: "🚶", carbonSaved: 18.7, promptsCount: 76, sustainabilityScore: 58, rank: 19, badgeCount: 1 },
   { userId: "u20", name: "Newcomer", avatar: "🌟", carbonSaved: 5.2, promptsCount: 23, sustainabilityScore: 42, rank: 20, badgeCount: 1 },
 ];
+
+// ─── Impact Stats Calculation ────────────────────────────────────────────────
+
+export function calculateImpactStats(): ImpactStats {
+  const chats = getAllChats();
+  let promptsCached = 0;
+  let totalRecycledPrompts = 0;
+  let promptsShortened = 0;
+  let totalTokensSaved = 0;
+  let carbonSaved_g = 0;
+
+  for (const chat of chats) {
+    carbonSaved_g += chat.carbonSaved;
+    const msgs = getMessages(chat.id);
+    for (const m of msgs) {
+      if (m.role === "assistant") {
+        if (m.carbon.cached) {
+          promptsCached++;
+          totalRecycledPrompts++;
+          totalTokensSaved += m.carbon.cache_hit_tokens;
+        }
+        if (m.carbon.compressed && m.carbon.original_tokens > m.carbon.compressed_tokens) {
+          promptsShortened++;
+          totalTokensSaved += m.carbon.original_tokens - m.carbon.compressed_tokens;
+        }
+      }
+    }
+  }
+
+  // Convert g to ensure we have grams
+  const carbonG = carbonSaved_g > 10 ? carbonSaved_g : carbonSaved_g * 1000;
+  const energySaved_kWh = totalTokensSaved * 0.000004;
+  const waterSaved_mL = energySaved_kWh * 1800;
+  const treeHoursEquivalent = carbonG / 22;
+
+  return {
+    promptsCached,
+    totalRecycledPrompts,
+    promptsShortened,
+    totalTokensSaved,
+    energySaved_kWh,
+    carbonSaved_g: carbonG,
+    waterSaved_mL,
+    treeHoursEquivalent,
+  };
+}

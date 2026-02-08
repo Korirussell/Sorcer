@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
-import { AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
   Leaf,
@@ -296,7 +296,13 @@ export function SorcerSidebar({ isOpen, onClose, onCollapse }: SidebarProps) {
         )}
 
         <div className="flex items-center justify-between text-[10px] text-oak/30 pt-1">
-          <span className="font-sub text-xs">Sorcer v1.0</span>
+          <button
+            onClick={() => { router.push("/developer"); onClose(); }}
+            className="font-sub text-xs hover:text-oak/50 transition-colors cursor-default"
+            title=""
+          >
+            Sorcer v1.0
+          </button>
           <div className="flex items-center gap-1">
             <Leaf className="w-2.5 h-2.5" />
             <span>Protecting Digital Earth</span>

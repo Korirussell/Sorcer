@@ -6,6 +6,7 @@ import { Send, Leaf, Zap, Flame, Sprout, ChevronDown, Clock } from "lucide-react
 import { toast } from "sonner";
 import { useEnergy } from "@/context/EnergyContext";
 import { SearchVines } from "./SearchVines";
+import { InkSplashButton } from "./InkSplash";
 import { postOrchestrate } from "@/utils/api";
 
 function setCookie(name: string, value: string) {
@@ -183,10 +184,11 @@ export function SpellBar({
             </div>
           )}
 
-          {/* Submit — Magic Orb mini */}
-          <button
+          {/* Submit — Magic Orb mini with ink splash */}
+          <InkSplashButton
             type="submit"
             disabled={!input.trim() || status !== "ready"}
+            splashColor="rgba(75,106,76,0.2)"
             className={`
               w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200
               ${input.trim() && status === "ready"
@@ -200,7 +202,7 @@ export function SpellBar({
             ) : (
               <Send className="w-4 h-4" />
             )}
-          </button>
+          </InkSplashButton>
         </div>
 
         {/* Status bar */}

@@ -40,5 +40,16 @@ export interface LeaderboardEntry {
   badgeCount: number;
 }
 
+export interface ImpactStats {
+  promptsCached: number;
+  totalRecycledPrompts: number;
+  promptsShortened: number;
+  totalTokensSaved: number;
+  energySaved_kWh: number;
+  carbonSaved_g: number;
+  waterSaved_mL: number;
+  treeHoursEquivalent: number;
+}
+
 export type LeaderboardFilter = "all-time" | "month" | "week";
 export type LeaderboardSort = "carbonSaved" | "sustainabilityScore" | "promptsCount";

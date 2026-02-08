@@ -7,9 +7,15 @@ import {
   ArrowLeft, Bot, UserIcon, Leaf, Zap, Flame, Copy, Check,
   FlaskConical, Search, Shrink, MapPin, Shield, Sparkles,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { SpellBar } from "@/components/SpellBar";
-import { RouteMapViz } from "@/components/RouteMapViz";
+import { CacheTimeline } from "@/components/CacheTimeline";
 import { useEnergy } from "@/context/EnergyContext";
+
+const RouteMapViz = dynamic(() => import("@/components/RouteMapViz").then(m => m.RouteMapViz), { ssr: false, loading: () => <div className="h-40 rounded-xl bg-parchment-dark/30 animate-pulse" /> });
+const CacheCelebration = dynamic(() => import("@/components/CacheCelebration").then(m => m.CacheCelebration), { ssr: false });
+const GoldenShimmerBorder = dynamic(() => import("@/components/CacheCelebration").then(m => m.GoldenShimmerBorder), { ssr: false, loading: () => <></> });
+const CarbonParticleFlow = dynamic(() => import("@/components/CarbonParticleFlow").then(m => m.CarbonParticleFlow), { ssr: false });
 import { postOrchestrate, getReceipt } from "@/utils/api";
 import {
   getChat, getMessages, addMessage, updateChat, createChat,
@@ -208,7 +214,7 @@ const REGION_COORDS: Record<string, [number, number]> = {
 };
 const ATLANTA: [number, number] = [330, 170];
 
-function OptimizationSequence({ phase, region }: { phase: OptPhase; region?: string }) {
+function OptimizationSequence({ phase, region, cacheHit = false }: { phase: OptPhase; region?: string; cacheHit?: boolean }) {
   const activeIdx = OPT_STEPS.findIndex((s) => s.phase === phase);
   const dest = REGION_COORDS[region || "us-central1"] || REGION_COORDS["us-central1"];
   return (
@@ -217,29 +223,56 @@ function OptimizationSequence({ phase, region }: { phase: OptPhase; region?: str
         const isActive = i === activeIdx;
         const isDone = i < activeIdx;
         const isPending = i > activeIdx;
+        const isCacheStep = step.phase === "cache_check";
+        const showCelebration = cacheHit && isCacheStep && isDone;
         return (
           <motion.div key={step.phase}
-            className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-300 ${isActive ? `${step.bg} border border-current/10` : isDone ? "opacity-60" : "opacity-20"}`}
+            className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-300 ${
+              showCelebration ? "bg-topaz/15 border border-topaz/25" :
+              isActive ? `${step.bg} border border-current/10` : isDone ? "opacity-60" : "opacity-20"
+            }`}
             initial={{ opacity: 0, x: -20 }} animate={{ opacity: isPending ? 0.2 : 1, x: 0 }} transition={{ delay: i * 0.15, duration: 0.3 }}>
-            <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${isActive ? step.bg : isDone ? "bg-moss/10" : "bg-oak/5"}`}>
-              {isDone ? (
+            <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
+              showCelebration ? "bg-topaz/20" :
+              isActive ? step.bg : isDone ? "bg-moss/10" : "bg-oak/5"
+            }`}>
+              {showCelebration ? (
+                <motion.div initial={{ scale: 0, rotate: -180 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 400, damping: 15 }}>
+                  <Zap className="w-3.5 h-3.5 text-topaz fill-topaz" />
+                </motion.div>
+              ) : isDone ? (
                 <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300 }}><Check className="w-3.5 h-3.5 text-moss" /></motion.div>
               ) : isActive ? (
                 <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}><step.icon className={`w-3.5 h-3.5 ${step.color}`} /></motion.div>
               ) : (<step.icon className="w-3.5 h-3.5 text-oak/30" />)}
             </div>
             <div className="flex-1 min-w-0">
-              <div className={`text-[11px] font-medium ${isActive ? step.color : isDone ? "text-moss" : "text-oak/30"}`}>
+              <div className={`text-[11px] font-medium ${
+                showCelebration ? "text-topaz" :
+                isActive ? step.color : isDone ? "text-moss" : "text-oak/30"
+              }`}>
                 {step.label}
-                {isDone && step.phase === "cache_check" && " — Hit!"}
-                {isDone && step.phase === "compressing" && " — 30% smaller"}
-                {isDone && step.phase === "routing" && ` — ${region || "us-central1"}`}
+                {showCelebration && " — ⚡ INSTANT"}
+                {!showCelebration && isDone && step.phase === "cache_check" && " — Hit!"}
+                {isDone && step.phase === "compressing" && (cacheHit ? " — skipped" : " — 30% smaller")}
+                {isDone && step.phase === "routing" && (cacheHit ? " — skipped" : ` — ${region || "us-central1"}`)}
+                {isDone && step.phase === "map" && cacheHit && " — skipped"}
               </div>
-              {isActive && (
+              {isActive && !cacheHit && (
                 <motion.div className="text-[9px] text-oak/40" animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.5, repeat: Infinity }}>{step.detail}</motion.div>
               )}
             </div>
-            {isActive && (
+            {showCelebration && (
+              <motion.span
+                className="text-[10px] font-medium text-topaz bg-topaz/10 px-2 py-0.5 rounded-md border border-topaz/20"
+                initial={{ x: 30, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 200, damping: 18, delay: 0.1 }}
+              >
+                ⚡ INSTANT
+              </motion.span>
+            )}
+            {isActive && !cacheHit && (
               <motion.div className={`w-1.5 h-1.5 rounded-full ${step.color.replace("text-", "bg-")}`}
                 animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }} transition={{ duration: 0.8, repeat: Infinity }} />
             )}
@@ -248,17 +281,17 @@ function OptimizationSequence({ phase, region }: { phase: OptPhase; region?: str
       })}
       {(phase === "map" || phase === "generating") && (
         <motion.div className="rounded-xl overflow-hidden border border-moss/15 bg-parchment-dark/30"
-          initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 120 }} transition={{ duration: 0.5 }}>
+          initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 120 }} transition={{ duration: 0.3 }}>
           <svg viewBox="0 0 440 120" className="w-full h-full">
             <rect x="20" y="10" width="400" height="100" rx="8" fill="rgba(107,55,16,0.02)" stroke="rgba(107,55,16,0.06)" strokeWidth="0.5" />
             <motion.path d={`M${ATLANTA[0]},${ATLANTA[1]} Q${(ATLANTA[0] + dest[0]) / 2},${Math.min(ATLANTA[1], dest[1]) - 50} ${dest[0]},${dest[1]}`}
               fill="none" stroke="#B52121" strokeWidth={1.5} strokeDasharray="6,4" opacity={0.6}
-              initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.5, ease: "easeInOut" }} />
-            <motion.circle r={3} fill="#B52121" initial={{ cx: ATLANTA[0], cy: ATLANTA[1] }} animate={{ cx: dest[0], cy: dest[1] }} transition={{ duration: 1.8, ease: "easeInOut" }} />
+              initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.7, ease: "easeInOut" }} />
+            <motion.circle r={3} fill="#B52121" initial={{ cx: ATLANTA[0], cy: ATLANTA[1] }} animate={{ cx: dest[0], cy: dest[1] }} transition={{ duration: 0.8, ease: "easeInOut" }} />
             <circle cx={ATLANTA[0]} cy={ATLANTA[1]} r={5} fill="rgba(107,55,16,0.15)" />
             <circle cx={ATLANTA[0]} cy={ATLANTA[1]} r={2.5} fill="#6B3710" />
             <text x={ATLANTA[0]} y={ATLANTA[1] - 8} textAnchor="middle" fill="#6B3710" fontSize="7" fontWeight="bold" opacity={0.6}>Atlanta</text>
-            <motion.g initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 1.2 }}>
+            <motion.g initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.5 }}>
               <motion.circle cx={dest[0]} cy={dest[1]} r={8} fill="rgba(75,106,76,0.1)" animate={{ r: [8, 12, 8] }} transition={{ duration: 2, repeat: Infinity }} />
               <circle cx={dest[0]} cy={dest[1]} r={4} fill="rgba(75,106,76,0.2)" />
               <circle cx={dest[0]} cy={dest[1]} r={2} fill="#4B6A4C" />
@@ -336,9 +369,14 @@ function MessageBubble({ msg, index }: { msg: StoredMessage; index: number }) {
         {isUser ? <UserIcon className="w-4 h-4 text-oak/50" /> : <Bot className="w-4 h-4 text-moss" />}
       </div>
       <div className={`flex-1 min-w-0 max-w-[85%] ${isUser ? "text-right" : ""}`}>
-        <div className={`inline-block text-left rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser ? "bg-oak/8 text-oak rounded-tr-md" : "bg-parchment-dark/60 border border-oak/8 text-oak/80 rounded-tl-md"}`}>
+        <motion.div
+          className={`inline-block text-left rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser ? "bg-oak/8 text-oak rounded-tr-md" : "bg-parchment-dark/60 border border-oak/8 text-oak/80 rounded-tl-md"}`}
+          initial={!isUser ? { filter: "blur(2px)", opacity: 0.3 } : undefined}
+          animate={!isUser ? { filter: "blur(0px)", opacity: 1 } : undefined}
+          transition={!isUser ? { duration: 0.5, delay: Math.min(index * 0.05, 0.3) + 0.15 } : undefined}
+        >
           <div className="whitespace-pre-wrap break-words prose-sm">{msg.content}</div>
-        </div>
+        </motion.div>
         {!isUser && (msg.carbon.cost_g > 0 || msg.carbon.cached || msg.carbon.compressed) && (() => {
           const reductionPct = msg.carbon.baseline_g > 0 ? Math.round(((msg.carbon.baseline_g - msg.carbon.cost_g) / msg.carbon.baseline_g) * 100) : 0;
           return (
@@ -432,19 +470,6 @@ function ChatPageInner() {
   const chatId = params.id as string;
   const { selectedModelId } = useEnergy();
   
-  // DEBUG: Show actual URL and search params
-  useEffect(() => {
-    console.log('[CHAT] Current URL:', window.location.href);
-    console.log('[CHAT] Search params:', window.location.search);
-    console.log('[CHAT] Pathname:', window.location.pathname);
-    
-    // Show in UI
-    const debugEl = document.getElementById('url-debug');
-    if (debugEl) {
-      debugEl.innerHTML = `URL: ${window.location.href}<br>Search: ${window.location.search}`;
-    }
-  }, []);
-
   // ── Core state ──
   const [chat, setChat] = useState<ChatRecord | null>(null);
   const [messages, setMessages] = useState<StoredMessage[]>([]);
@@ -458,12 +483,18 @@ function ChatPageInner() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [lastPromptText, setLastPromptText] = useState("");
+  const [cacheHit, setCacheHit] = useState(false);
+  const [lastWasCached, setLastWasCached] = useState(false);
   const [lastCarbonMeta, setLastCarbonMeta] = useState<CarbonMeta | null>(null);
+
+  const [particleTrigger, setParticleTrigger] = useState(false);
+  const [lastSavedAmount, setLastSavedAmount] = useState(0);
 
   // ── Refs for cancellation and preventing double-sends ──
   const cancelRef = useRef<{ cancelled: boolean }>({ cancelled: false });
   const autoSentRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lastMessageRef = useRef<HTMLDivElement>(null);
 
   // Derive SpellBar status
   const status: "ready" | "submitted" | "streaming" | "error" = isProcessing
@@ -508,6 +539,8 @@ function ChatPageInner() {
     setOptPhase(null);
     setShowBreakdown(false);
     setLastPromptText(prompt);
+    setCacheHit(false);
+    setLastWasCached(false);
 
     // 1. Save user message (skip if already saved by homepage)
     if (!skipUserMessage) {
@@ -541,21 +574,49 @@ function ChatPageInner() {
     // 2. Fire backend call immediately (runs in parallel with animation)
     const backendPromise = callBackend(prompt, chatId);
 
-    // 3. Optimization animation sequence
-    const phases: { phase: OptPhase; ms: number }[] = [
-      { phase: "cache_check", ms: 600 },
-      { phase: "compressing", ms: 500 },
-      { phase: "routing", ms: 500 },
-      { phase: "map", ms: 800 },
-      { phase: "generating", ms: 0 }, // waits for backend
-    ];
+    // Detect if this prompt is similar to a previous one (simulated cache hit)
+    const existingUserMsgs = messages.filter(m => m.role === "user").map(m => m.content.toLowerCase());
+    const promptLower = prompt.toLowerCase();
+    const promptWords = new Set(promptLower.split(/\s+/).filter(w => w.length > 3));
+    const isCacheHit = existingUserMsgs.some(prev => {
+      const prevWords = new Set(prev.split(/\s+/).filter((w: string) => w.length > 3));
+      const overlap = [...promptWords].filter(w => prevWords.has(w)).length;
+      const union = new Set([...promptWords, ...prevWords]).size;
+      return union > 0 && overlap / union > 0.4;
+    });
 
-    for (const { phase, ms } of phases) {
-      if (signal.cancelled) return;
-      setOptPhase(phase);
-      if (ms > 0) {
-        const ok = await delay(ms, signal);
-        if (!ok) return;
+    // 3. Optimization animation sequence
+    if (isCacheHit) {
+      setCacheHit(true);
+      setLastWasCached(true);
+      // Cache check phase — normal speed
+      setOptPhase("cache_check");
+      const ok1 = await delay(400, signal);
+      if (!ok1) return;
+      // Fast-forward remaining phases (100ms each)
+      for (const phase of ["compressing", "routing", "map", "generating"] as OptPhase[]) {
+        if (signal.cancelled) return;
+        setOptPhase(phase);
+        if (phase !== "generating") {
+          const ok = await delay(100, signal);
+          if (!ok) return;
+        }
+      }
+    } else {
+      const phases: { phase: OptPhase; ms: number }[] = [
+        { phase: "cache_check", ms: 400 },
+        { phase: "compressing", ms: 350 },
+        { phase: "routing", ms: 350 },
+        { phase: "map", ms: 500 },
+        { phase: "generating", ms: 0 },
+      ];
+      for (const { phase, ms } of phases) {
+        if (signal.cancelled) return;
+        setOptPhase(phase);
+        if (ms > 0) {
+          const ok = await delay(ms, signal);
+          if (!ok) return;
+        }
       }
     }
 
@@ -613,10 +674,15 @@ function ChatPageInner() {
     updateChat(chatId, { carbonSaved: newSaved, model: carbonMeta.model, region: carbonMeta.region });
     setChat(prev => prev ? { ...prev, carbonSaved: newSaved, model: carbonMeta.model, region: carbonMeta.region } : prev);
 
-    // 9. Done — show breakdown
+    // 9. Done — trigger particles + show breakdown
     setLastCarbonMeta(carbonMeta);
     setStreamingContent("");
     setIsProcessing(false);
+    if (carbonMeta.saved_g > 0) {
+      setLastSavedAmount(carbonMeta.saved_g);
+      setParticleTrigger(true);
+      setTimeout(() => setParticleTrigger(false), 2000);
+    }
     setShowBreakdown(true);
   }, [chatId]);
 
@@ -626,41 +692,16 @@ function ChatPageInner() {
 
   // ── Auto-send: detect user message with no assistant response ──
   useEffect(() => {
-    const debugEl = document.getElementById('auto-send-debug');
-    
-    if (!loaded) {
-      if (debugEl) debugEl.textContent = 'Not loaded';
-      return;
-    }
-    if (autoSentRef.current) {
-      if (debugEl) debugEl.textContent = 'Already sent';
-      return;
-    }
-    
-    // Check if the last message is a user message with no assistant response
-    // This means the homepage just created this chat and we need to generate a response
+    if (!loaded) return;
+    if (autoSentRef.current) return;
+
     const lastMsg = messages[messages.length - 1];
-    if (!lastMsg || lastMsg.role !== 'user') {
-      if (debugEl) debugEl.textContent = 'No pending user msg';
-      return;
-    }
-    
-    // Check there's no assistant message after it
+    if (!lastMsg || lastMsg.role !== 'user') return;
+
     const hasAssistantResponse = messages.some((m, i) => i > messages.indexOf(lastMsg) && m.role === 'assistant');
-    if (hasAssistantResponse) {
-      if (debugEl) debugEl.textContent = 'Already has response';
-      return;
-    }
-    
-    console.log('[AUTO-SEND] Found pending user message:', lastMsg.content.slice(0, 50));
+    if (hasAssistantResponse) return;
+
     autoSentRef.current = true;
-    
-    if (debugEl) {
-      debugEl.textContent = 'Firing!';
-      debugEl.style.color = 'green';
-    }
-    
-    // Run the prompt flow but skip saving the user message (already saved by homepage)
     runPromptFlowRef.current(lastMsg.content, true, true);
   }, [loaded, chatId, messages]);
 
@@ -719,19 +760,14 @@ function ChatPageInner() {
         </button>
       </div>
 
+      {/* Cache Timeline */}
+      {messages.length > 1 && <CacheTimeline messages={messages} />}
+
+      {/* Carbon Particle Flow */}
+      <CarbonParticleFlow trigger={particleTrigger} sourceRef={lastMessageRef} savedAmount={lastSavedAmount} />
+
       {/* Messages + animations */}
       <div className="flex-1 space-y-4 py-6 px-2">
-        {/* DEBUG: Show flow state */}
-        <div className="fixed top-4 right-4 bg-oak/10 border border-oak/20 rounded-lg p-2 text-[10px] font-mono z-50">
-          <div>loaded: {loaded ? '✓' : '✗'}</div>
-          <div>isProcessing: {isProcessing ? '✓' : '✗'}</div>
-          <div>optPhase: {optPhase || 'null'}</div>
-          <div>streaming: {streamingContent.length > 0 ? '✓' : '✗'}</div>
-          <div>messages: {messages.length}</div>
-          <div>autoSent: {autoSentRef.current ? '✓' : '✗'}</div>
-          <div id="auto-send-debug" style={{color: 'red', fontWeight: 'bold'}}>Auto-send: ???</div>
-          <div id="url-debug" style={{color: 'blue', fontSize: '9px', marginTop: '4px', whiteSpace: 'pre-wrap'}}>URL: ???</div>
-        </div>
         
         {messages.length === 0 && !isProcessing && (
           <motion.div className="flex flex-col items-center justify-center py-20 text-center"
@@ -745,13 +781,24 @@ function ChatPageInner() {
         )}
 
         {messages.map((msg, i) => (
-          <MessageBubble key={msg.id} msg={msg} index={i} />
+          <div key={msg.id} ref={i === messages.length - 1 ? lastMessageRef : undefined}>
+            <MessageBubble msg={msg} index={i} />
+          </div>
         ))}
 
         {/* Optimization animation */}
         <AnimatePresence>
           {optPhase && (
-            <OptimizationSequence phase={optPhase} region={optRegion} />
+            <OptimizationSequence phase={optPhase} region={optRegion} cacheHit={cacheHit} />
+          )}
+        </AnimatePresence>
+
+        {/* Cache hit celebration */}
+        <AnimatePresence>
+          {cacheHit && optPhase === "compressing" && (
+            <motion.div className="flex justify-center py-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <CacheCelebration active={true} savedSeconds={3.2} />
+            </motion.div>
           )}
         </AnimatePresence>
 
@@ -763,13 +810,37 @@ function ChatPageInner() {
                 <Bot className="w-4 h-4 text-moss" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="inline-block text-left rounded-2xl rounded-tl-md px-4 py-3 text-sm leading-relaxed bg-parchment-dark/60 border border-oak/8 text-oak/80">
-                  <div className="whitespace-pre-wrap break-words">
-                    {streamingContent}
-                    <motion.span className="inline-block w-0.5 h-4 bg-moss ml-0.5 align-middle"
-                      animate={{ opacity: [1, 0, 1] }} transition={{ duration: 0.6, repeat: Infinity }} />
+                {lastWasCached ? (
+                  <GoldenShimmerBorder>
+                    <div className="inline-block text-left rounded-2xl rounded-tl-md px-4 py-3 text-sm leading-relaxed bg-parchment-dark/60 border border-topaz/20 text-oak/80">
+                      <div className="whitespace-pre-wrap break-words">
+                        {streamingContent}
+                        <motion.span className="inline-block ml-0.5 align-middle" style={{ width: 12, height: 16 }}
+                          animate={{ rotate: [0, -8, 0, 5, 0], y: [0, -1, 0, 1, 0] }}
+                          transition={{ duration: 0.8, repeat: Infinity }}>
+                          <svg viewBox="0 0 12 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M6 0L8 6L6 14L5 16L4 14L2 6L6 0Z" fill="#DDA059" opacity="0.8" />
+                            <path d="M6 0L6.5 3L6 14L5.5 3L6 0Z" fill="#6B3710" opacity="0.3" />
+                          </svg>
+                        </motion.span>
+                      </div>
+                    </div>
+                  </GoldenShimmerBorder>
+                ) : (
+                  <div className="inline-block text-left rounded-2xl rounded-tl-md px-4 py-3 text-sm leading-relaxed bg-parchment-dark/60 border border-oak/8 text-oak/80">
+                    <div className="whitespace-pre-wrap break-words">
+                      {streamingContent}
+                      <motion.span className="inline-block ml-0.5 align-middle" style={{ width: 12, height: 16 }}
+                        animate={{ rotate: [0, -8, 0, 5, 0], y: [0, -1, 0, 1, 0] }}
+                        transition={{ duration: 0.8, repeat: Infinity }}>
+                        <svg viewBox="0 0 12 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M6 0L8 6L6 14L5 16L4 14L2 6L6 0Z" fill="#4B6A4C" opacity="0.8" />
+                          <path d="M6 0L6.5 3L6 14L5.5 3L6 0Z" fill="#6B3710" opacity="0.3" />
+                        </svg>
+                      </motion.span>
+                    </div>
                   </div>
-                </div>
+                )}
                 {streamingContent.length > 50 && <ServerComparison chosenRegion={optRegion} />}
               </div>
             </motion.div>

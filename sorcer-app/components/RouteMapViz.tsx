@@ -70,9 +70,9 @@ function RouteMapVizInner({ model, region, cfePercent }: RouteMapVizProps) {
 
   // Animation phases: 0=zoomed on Atlanta, 1=show route, 2=full view, 3=zoom to destination
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase(1), 800);
-    const t2 = setTimeout(() => setPhase(2), 2500);
-    const t3 = setTimeout(() => setPhase(3), 4500);
+    const t1 = setTimeout(() => setPhase(1), 400);
+    const t2 = setTimeout(() => setPhase(2), 1200);
+    const t3 = setTimeout(() => setPhase(3), 2200);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, []);
 
@@ -101,7 +101,7 @@ function RouteMapVizInner({ model, region, cfePercent }: RouteMapVizProps) {
           viewBox={viewBox}
           preserveAspectRatio="xMidYMid meet"
           animate={{ viewBox }}
-          transition={{ duration: 1.5, ease: "easeInOut" }}
+          transition={{ duration: 0.8, ease: "easeInOut" }}
         >
           {/* Real US states */}
           {features.map((f, i) => {
@@ -119,7 +119,7 @@ function RouteMapVizInner({ model, region, cfePercent }: RouteMapVizProps) {
                 d={curvePath}
                 fill="none" stroke="#B52121" strokeWidth={2} strokeDasharray="6,4" opacity={0.5}
                 initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
-                transition={{ duration: 2, ease: "easeInOut" }}
+                transition={{ duration: 0.7, ease: "easeInOut" }}
               />
               {waypoints.map((wp, i) => (
                 <motion.circle key={i} cx={wp.x} cy={wp.y} r={2.5} fill="#B52121" opacity={0.25}
@@ -129,7 +129,7 @@ function RouteMapVizInner({ model, region, cfePercent }: RouteMapVizProps) {
               <motion.circle r={4} fill="#B52121"
                 initial={{ cx: atlPt[0], cy: atlPt[1], opacity: 0 }}
                 animate={{ cx: destPt[0], cy: destPt[1], opacity: [0, 1, 1, 0.8] }}
-                transition={{ duration: 2.5, ease: "easeInOut", repeat: Infinity, repeatDelay: 2 }}
+                transition={{ duration: 0.8, ease: "easeInOut", repeat: Infinity, repeatDelay: 2 }}
               />
             </>
           )}
@@ -145,7 +145,7 @@ function RouteMapVizInner({ model, region, cfePercent }: RouteMapVizProps) {
 
           {/* Destination server */}
           {phase >= 1 && (
-            <motion.g initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 1.5, type: "spring", stiffness: 200 }}>
+            <motion.g initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.5, type: "spring", stiffness: 200 }}>
               <motion.circle cx={destPt[0]} cy={destPt[1]} r={16} fill="rgba(75,106,76,0.08)"
                 animate={{ r: [16, 22, 16], opacity: [0.08, 0.15, 0.08] }} transition={{ duration: 2.5, repeat: Infinity }} />
               <circle cx={destPt[0]} cy={destPt[1]} r={9} fill="rgba(75,106,76,0.15)" />
@@ -159,7 +159,7 @@ function RouteMapVizInner({ model, region, cfePercent }: RouteMapVizProps) {
         {/* Legend */}
         <motion.div
           className="absolute bottom-2 left-2 flex items-center gap-3 px-2.5 py-1.5 rounded-lg bg-parchment/80 border border-oak/8"
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 2.5 }}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.0 }}
         >
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-[#6B3710]" />
