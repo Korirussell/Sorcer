@@ -1,2 +1,5 @@
 # Editor
 .vscode/
+
+# Credentials
+backend/eco_orchestrator/service-account.json
