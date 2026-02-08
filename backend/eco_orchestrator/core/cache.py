@@ -1,4 +1,4 @@
-"""Cache helpers for the project.
+"""Cache helpers for the project - DISABLED
 
 This module exposes:
 - hash-based exact-match cache helpers using the RedisCache wrapper
@@ -29,25 +29,12 @@ DEFAULT_TTL = int(os.getenv("CACHE_TTL", 3600))
 REDIS_URL = os.getenv("REDIS_URL", f"redis://{REDIS_HOST}:{REDIS_PORT}")
 
 
-# Instantiate a module-level key/value cache (optional: app starts even if Redis is down).
-try:
-    kv_cache = RedisCache(host=REDIS_HOST, port=REDIS_PORT, default_ttl=DEFAULT_TTL)
-except Exception:
-    kv_cache = None
+# Instantiate a module-level key/value cache (disabled)
+kv_cache = RedisCache(host=REDIS_HOST, port=REDIS_PORT, default_ttl=DEFAULT_TTL)
 
 
-# Optional semantic cache (may remain None if `redisvl` not installed)
+# Optional semantic cache (disabled)
 llmcache = None
-if SemanticCache is not None and HFTextVectorizer is not None:
-    try:
-        llmcache = SemanticCache(
-            name="prompt_cache",
-            redis_url=REDIS_URL,
-            distance_threshold=0.1,
-            vectorizer=HFTextVectorizer("sentence-transformers/all-MiniLM-L6-v2"),
-        )
-    except Exception:
-        llmcache = None
 
 
 # -----------------------------

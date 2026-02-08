@@ -1,9 +1,8 @@
 # ============================================================================
-# Redis Cache Wrapper Class
+# Redis Cache Wrapper Class - DISABLED
 # ============================================================================
 
 import json
-import redis
 from typing import Any, Optional
 from loguru import logger
 
@@ -18,6 +17,8 @@ class RedisCache:
     - Retrieving values from cache
     - Storing key-value pairs in cache
     - JSON serialization/deserialization for complex types
+    
+    NOTE: Redis is disabled for now - all operations will be no-ops
     """
     
     def __init__(
@@ -39,20 +40,8 @@ class RedisCache:
             default_ttl: Default time-to-live in seconds for cached items (default: None)
         """
         self.default_ttl = default_ttl
-        try:
-            self.redis_client = redis.Redis(
-                host=host,
-                port=port,
-                db=db,
-                password=password,
-                decode_responses=True,
-                socket_connect_timeout=5
-            )
-            self.redis_client.ping()
-            logger.info(f"✓ Redis cache connected to {host}:{port}")
-        except redis.ConnectionError as e:
-            logger.warning(f"✗ Redis unavailable ({host}:{port}), cache disabled: {e}")
-            self.redis_client = None
+        self.redis_client = None
+        logger.info("✓ Redis cache disabled (no-op mode)")
     
     def exists(self, key: str) -> bool:
         """
