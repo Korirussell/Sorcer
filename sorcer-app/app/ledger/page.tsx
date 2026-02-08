@@ -436,38 +436,16 @@ export default function LedgerPage() {
         </div>
       </motion.div>
 
-      {/* ── Charts Row ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-        <motion.div
-          className="specimen-card p-5"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-        >
-          <h3 className="text-[10px] text-oak/40 uppercase tracking-wider mb-3">This Week</h3>
-          <WeeklyChart data={WEEKLY_DATA} />
-          <div className="flex items-center gap-4 mt-3">
-            <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded bg-moss/60" />
-              <span className="text-[9px] text-oak/40">Saved</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded bg-witchberry/30" />
-              <span className="text-[9px] text-oak/40">Cost</span>
-            </div>
-          </div>
-        </motion.div>
-
-        <motion.div
-          className="specimen-card p-5"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.15 }}
-        >
-          <h3 className="text-[10px] text-oak/40 uppercase tracking-wider mb-3">Monthly Trend</h3>
-          <MonthlyTrend data={MONTHLY_DATA} />
-        </motion.div>
-      </div>
+      {/* ── Monthly Trend ── */}
+      <motion.div
+        className="specimen-card p-5 mb-6"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1 }}
+      >
+        <h3 className="text-[10px] text-oak/40 uppercase tracking-wider mb-3">Monthly Trend</h3>
+        <MonthlyTrend data={MONTHLY_DATA} />
+      </motion.div>
 
       {/* ── Carbon Budget ── */}
       <motion.div

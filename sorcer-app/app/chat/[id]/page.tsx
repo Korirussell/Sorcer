@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo, useReducer, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Bot, UserIcon, Leaf, Zap, Flame, Copy, Check, FlaskConical, Search, Shrink, MapPin, Shield, Sparkles } from "lucide-react";
 import { SpellBar } from "@/components/SpellBar";
 import { RouteMapViz } from "@/components/RouteMapViz";
 import { useEnergy } from "@/context/EnergyContext";
-import { postOrchestrate, getHealth, getReceipt, type OrchestrateResponse } from "@/utils/api";
+import { postOrchestrate, getReceipt } from "@/utils/api";
 import {
   getChat,
   getMessages,
@@ -598,30 +598,92 @@ function MessageBubble({ msg, index, isStreaming }: { msg: StoredMessage; index:
   );
 }
 
-// ─── Main Chat Page ─────────────────────────────────────────────────────────
+// ─── State Machine ───────────────────────────────────────────────────────────
 
-export default function LocalChatPage() {
+type OptStep = "cache_check" | "compressing" | "routing" | "map" | "generating";
+
+type ChatPhase =
+  | { type: "idle" }
+  | { type: "optimizing"; step: OptStep }
+  | { type: "streaming"; content: string }
+  | { type: "complete"; showBreakdown: boolean };
+
+type ChatAction =
+  | { type: "START_OPTIMIZING" }
+  | { type: "NEXT_OPT_STEP" }
+  | { type: "START_STREAMING" }
+  | { type: "STREAM_CHAR"; content: string }
+  | { type: "FINISH" }
+  | { type: "SHOW_BREAKDOWN" }
+  | { type: "HIDE_BREAKDOWN" }
+  | { type: "RESET" };
+
+const OPT_STEP_ORDER: OptStep[] = ["cache_check", "compressing", "routing", "map", "generating"];
+
+function chatPhaseReducer(state: ChatPhase, action: ChatAction): ChatPhase {
+  switch (action.type) {
+    case "START_OPTIMIZING":
+      return { type: "optimizing", step: "cache_check" };
+    case "NEXT_OPT_STEP": {
+      if (state.type !== "optimizing") return state;
+      const idx = OPT_STEP_ORDER.indexOf(state.step);
+      if (idx < OPT_STEP_ORDER.length - 1) {
+        return { type: "optimizing", step: OPT_STEP_ORDER[idx + 1] };
+      }
+      return state; // stay on "generating" until backend resolves
+    }
+    case "START_STREAMING":
+      return { type: "streaming", content: "" };
+    case "STREAM_CHAR":
+      return { type: "streaming", content: action.content };
+    case "FINISH":
+      return { type: "complete", showBreakdown: true };
+    case "SHOW_BREAKDOWN":
+      if (state.type === "complete") return { ...state, showBreakdown: true };
+      return state;
+    case "HIDE_BREAKDOWN":
+      if (state.type === "complete") return { ...state, showBreakdown: false };
+      return state;
+    case "RESET":
+      return { type: "idle" };
+    default:
+      return state;
+  }
+}
+
+// ─── Inner Chat Component (uses useSearchParams) ─────────────────────────────
+
+function ChatPageInner() {
   const params = useParams();
   const router = useRouter();
   const chatId = params.id as string;
-  const { mode, selectedModelId } = useEnergy();
+  const { selectedModelId } = useEnergy();
+  const searchParams = useSearchParams();
+  const initialQuery = searchParams.get("query");
   const autoSentRef = useRef(false);
 
+  const [phase, dispatch] = useReducer(chatPhaseReducer, { type: "idle" });
   const [chat, setChat] = useState<ChatRecord | null>(null);
-  const [messages, setMessages] = useState<StoredMessage[]>([]);
+  const [messages, setMessagesState] = useState<StoredMessage[]>([]);
   const [input, setInput] = useState("");
-  const [status, setStatus] = useState<"ready" | "submitted" | "streaming" | "error">("ready");
-  const [streamingContent, setStreamingContent] = useState("");
-  const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [optPhase, setOptPhase] = useState<OptPhase | null>(null);
   const [optRegion, setOptRegion] = useState<string>("us-central1");
-  const [showBreakdown, setShowBreakdown] = useState(false);
   const [lastPromptText, setLastPromptText] = useState<string>("");
   const [lastCarbonMeta, setLastCarbonMeta] = useState<CarbonMeta | null>(null);
+  const [showBreakdownManual, setShowBreakdownManual] = useState(false);
+  const [currentPrompt, setCurrentPrompt] = useState<string | null>(null);
+  // undefined = not yet fetched, null = backend offline, object = result
+  const [backendResult, setBackendResult] = useState<{ response: string; carbonMeta: CarbonMeta; deferred: boolean } | null | undefined>(undefined);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const streamCancelledRef = useRef(false);
+
+  // Derive status for SpellBar
+  const status: "ready" | "submitted" | "streaming" | "error" = useMemo(() => {
+    if (phase.type === "optimizing") return "submitted";
+    if (phase.type === "streaming") return "streaming";
+    return "ready";
+  }, [phase.type]);
 
   // Load chat + messages from localStorage
   useEffect(() => {
@@ -639,15 +701,146 @@ export default function LocalChatPage() {
       createChat(c);
     }
     setChat(c);
-    setMessages(getMessages(chatId));
+    setMessagesState(getMessages(chatId));
     setLoaded(true);
   }, [chatId, selectedModelId]);
 
-  // ─── Shared send logic with live optimization visualization ──────────────
-  const sendPrompt = useCallback(async (prompt: string, isFirstMessage: boolean) => {
-    setStatus("submitted");
-    setLastPromptText(prompt);
+  // ─── A. Optimization phase timer (Strict-Mode safe) ──────────────────────
+  useEffect(() => {
+    if (phase.type !== "optimizing") return;
+    // "generating" step waits for backend — no auto-advance
+    if (phase.step === "generating") return;
+    const durations: Record<string, number> = {
+      cache_check: 600,
+      compressing: 500,
+      routing: 500,
+      map: 800,
+    };
+    const timer = setTimeout(() => dispatch({ type: "NEXT_OPT_STEP" }), durations[phase.step] || 500);
+    return () => clearTimeout(timer);
+  }, [phase]);
 
+  // ─── B. Fire backend call when optimization starts ───────────────────────
+  useEffect(() => {
+    if (phase.type !== "optimizing" || !currentPrompt || backendResult !== undefined) return;
+    let cancelled = false;
+    callBackend(currentPrompt, chatId).then((result) => {
+      if (!cancelled) {
+        if (result) {
+          setBackendResult(result);
+        } else {
+          // Backend offline — use dummy immediately
+          const dummyResponse = pickDummyResponse(currentPrompt);
+          const dummyMeta = makeDummyCarbonMeta();
+          setBackendResult({ response: dummyResponse, carbonMeta: dummyMeta, deferred: false });
+        }
+      }
+    });
+    return () => { cancelled = true; };
+  }, [phase.type, currentPrompt, chatId, backendResult]);
+
+  // ─── C. Transition from "generating" to "streaming" when backend resolves ─
+  useEffect(() => {
+    if (phase.type !== "optimizing" || phase.step !== "generating") return;
+    // Wait until backendResult is available (not undefined)
+    if (backendResult === undefined) return;
+
+    const timer = setTimeout(() => {
+      dispatch({ type: "START_STREAMING" });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [phase, backendResult]);
+
+  // ─── D. Character-by-character streaming ─────────────────────────────────
+  useEffect(() => {
+    if (phase.type !== "streaming") return;
+
+    // Determine the full response
+    let fullResponse: string;
+    let carbonMeta: CarbonMeta;
+
+    if (backendResult) {
+      fullResponse = backendResult.response;
+      carbonMeta = backendResult.carbonMeta;
+    } else {
+      fullResponse = currentPrompt ? pickDummyResponse(currentPrompt) : "Hello!";
+      carbonMeta = makeDummyCarbonMeta();
+    }
+
+    setOptRegion(carbonMeta.region);
+    streamCancelledRef.current = false;
+
+    let i = 0;
+    let accumulated = "";
+    const chars = fullResponse.split("");
+
+    function streamNext() {
+      if (streamCancelledRef.current || i >= chars.length) {
+        if (!streamCancelledRef.current) {
+          // Streaming complete — save message
+          const assistantMsg: StoredMessage = {
+            id: crypto.randomUUID(),
+            chatId,
+            role: "assistant",
+            content: fullResponse,
+            createdAt: new Date().toISOString(),
+            carbon: carbonMeta,
+          };
+          addMessage(assistantMsg);
+          setMessagesState((prev) => [...prev, assistantMsg]);
+
+          // Update chat carbon stats
+          const newSaved = (getChat(chatId)?.carbonSaved || 0) + carbonMeta.saved_g;
+          updateChat(chatId, { carbonSaved: newSaved, model: carbonMeta.model, region: carbonMeta.region });
+          setChat((prev) => prev ? { ...prev, carbonSaved: newSaved, model: carbonMeta.model, region: carbonMeta.region } : prev);
+
+          setLastCarbonMeta(carbonMeta);
+          setLastPromptText(currentPrompt || "");
+
+          // Reset for next prompt
+          setCurrentPrompt(null);
+          setBackendResult(undefined);
+
+          dispatch({ type: "FINISH" });
+        }
+        return;
+      }
+
+      accumulated += chars[i];
+      dispatch({ type: "STREAM_CHAR", content: accumulated });
+      const char = chars[i];
+      const delay = char === " " ? 6 : char === "\n" ? 20 : 8 + Math.random() * 6;
+      i++;
+      setTimeout(streamNext, delay);
+    }
+
+    // Small delay before starting stream for visual transition
+    const startTimer = setTimeout(streamNext, 100);
+
+    return () => {
+      streamCancelledRef.current = true;
+      clearTimeout(startTimer);
+    };
+    // Only run when phase becomes "streaming" — deps intentionally limited
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase.type]);
+
+  // ─── E. Auto-send from URL query param (Strict-Mode safe) ────────────────
+  useEffect(() => {
+    if (!loaded || autoSentRef.current || !initialQuery) return;
+
+    const timer = setTimeout(() => {
+      autoSentRef.current = true;
+      window.history.replaceState({}, "", `/chat/${chatId}`);
+      triggerSend(initialQuery, true);
+    }, 0);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, chatId, initialQuery]);
+
+  // ─── Send prompt (adds user msg, starts state machine) ───────────────────
+  const triggerSend = useCallback((prompt: string, isFirstMessage: boolean) => {
     // Save user message
     const userMsg: StoredMessage = {
       id: crypto.randomUUID(),
@@ -664,7 +857,7 @@ export default function LocalChatPage() {
       },
     };
     addMessage(userMsg);
-    setMessages((prev) => [...prev, userMsg]);
+    setMessagesState((prev) => [...prev, userMsg]);
 
     // Update chat title + prompt count
     const currentChat = getChat(chatId);
@@ -677,111 +870,13 @@ export default function LocalChatPage() {
       setChat((prev) => prev ? { ...prev, promptCount: (prev.promptCount || 0) + 1 } : prev);
     }
 
-    // ═══ LIVE OPTIMIZATION SEQUENCE ═══
-    // Step 1: Semantic cache check
-    setOptPhase("cache_check");
-    await new Promise((r) => setTimeout(r, 600));
+    // Set current prompt and clear previous backend result
+    setCurrentPrompt(prompt);
+    setBackendResult(undefined);
 
-    // Step 2: Prompt compression
-    setOptPhase("compressing");
-    await new Promise((r) => setTimeout(r, 500));
-
-    // Step 3: Carbon-aware routing
-    setOptPhase("routing");
-
-    // Fire the actual backend call in parallel with the routing animation
-    const backendPromise = callBackend(prompt, chatId);
-    await new Promise((r) => setTimeout(r, 500));
-
-    // Step 4: Route locked — show map
-    setOptPhase("map");
-    await new Promise((r) => setTimeout(r, 800));
-
-    // Step 5: Generating — wait for backend
-    setOptPhase("generating");
-    const backendResult = await backendPromise;
-
-    let fullResponse: string;
-    let carbonMeta: CarbonMeta;
-
-    if (backendResult) {
-      fullResponse = backendResult.response;
-      carbonMeta = backendResult.carbonMeta;
-      setOptRegion(carbonMeta.region);
-    } else {
-      await new Promise((r) => setTimeout(r, 400));
-      fullResponse = pickDummyResponse(prompt);
-      carbonMeta = makeDummyCarbonMeta();
-      setOptRegion(carbonMeta.region);
-    }
-
-    // Clear optimization sequence
-    setOptPhase("done");
-    await new Promise((r) => setTimeout(r, 300));
-    setOptPhase(null);
-
-    // Stream the response character by character
-    setStatus("streaming");
-    const assistantMsgId = crypto.randomUUID();
-    setStreamingMsgId(assistantMsgId);
-    setStreamingContent("");
-
-    let accumulated = "";
-    const chars = fullResponse.split("");
-    for (let i = 0; i < chars.length; i++) {
-      accumulated += chars[i];
-      setStreamingContent(accumulated);
-      const char = chars[i];
-      const delay = char === " " ? 6 : char === "\n" ? 20 : 8 + Math.random() * 6;
-      await new Promise((r) => setTimeout(r, delay));
-    }
-
-    // Save assistant message
-    const assistantMsg: StoredMessage = {
-      id: assistantMsgId,
-      chatId,
-      role: "assistant",
-      content: fullResponse,
-      createdAt: new Date().toISOString(),
-      carbon: carbonMeta,
-    };
-    addMessage(assistantMsg);
-
-    // Update chat carbon stats
-    const newSaved = (getChat(chatId)?.carbonSaved || 0) + carbonMeta.saved_g;
-    updateChat(chatId, { carbonSaved: newSaved, model: carbonMeta.model, region: carbonMeta.region });
-    setChat((prev) => prev ? { ...prev, carbonSaved: newSaved, model: carbonMeta.model, region: carbonMeta.region } : prev);
-
-    // Store carbon meta for breakdown popup
-    setLastCarbonMeta(carbonMeta);
-
-    // Commit message to state, then clear streaming
-    setMessages(getMessages(chatId));
-    await new Promise((r) => setTimeout(r, 50));
-    setStreamingMsgId(null);
-    setStreamingContent("");
-    setStatus("ready");
-
-    // Auto-show breakdown popup immediately after every prompt
-    setShowBreakdown(true);
+    // Start the state machine
+    dispatch({ type: "START_OPTIMIZING" });
   }, [chatId]);
-
-  // Store sendPrompt in a ref so the auto-send effect always has the latest version
-  const sendPromptRef = useRef(sendPrompt);
-  sendPromptRef.current = sendPrompt;
-
-  // Auto-send from sessionStorage (homepage stores pending query there)
-  useEffect(() => {
-    if (!loaded || autoSentRef.current) return;
-    const key = `pending-query-${chatId}`;
-    const query = sessionStorage.getItem(key);
-    if (query) {
-      sessionStorage.removeItem(key);
-      autoSentRef.current = true;
-      setInput("");
-      sendPromptRef.current(query, true);
-    }
-  }, [loaded, chatId]);
 
   // Auto-scroll to bottom
   const scrollToBottom = useCallback(() => {
@@ -790,16 +885,25 @@ export default function LocalChatPage() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, streamingContent, optPhase, scrollToBottom]);
+  }, [messages, phase, scrollToBottom]);
 
-  // Handle sending a message
-  const handleSubmit = useCallback(async () => {
+  // Handle sending a message from SpellBar
+  const handleSubmit = useCallback(() => {
     const prompt = input.trim();
-    if (!prompt || status !== "ready") return;
+    if (!prompt || (phase.type !== "idle" && phase.type !== "complete")) return;
     setInput("");
+
+    // If we were in "complete" state, reset first
+    if (phase.type === "complete") {
+      dispatch({ type: "RESET" });
+    }
+
     const isFirst = chat?.title === "New Conversation";
-    await sendPrompt(prompt, isFirst ?? false);
-  }, [input, status, chat, sendPrompt]);
+    // Use setTimeout(0) to let the RESET dispatch settle
+    setTimeout(() => {
+      triggerSend(prompt, isFirst ?? false);
+    }, 0);
+  }, [input, phase.type, chat, triggerSend]);
 
   // Compute total carbon saved
   const totalSaved = useMemo(() => {
@@ -807,6 +911,16 @@ export default function LocalChatPage() {
       .filter((m) => m.role === "assistant")
       .reduce((sum, m) => sum + m.carbon.saved_g, 0);
   }, [messages]);
+
+  // Show breakdown: from phase or manual toggle
+  const isBreakdownVisible = (phase.type === "complete" && phase.showBreakdown) || showBreakdownManual;
+  const closeBreakdown = useCallback(() => {
+    if (phase.type === "complete") dispatch({ type: "HIDE_BREAKDOWN" });
+    setShowBreakdownManual(false);
+  }, [phase.type]);
+  const openBreakdown = useCallback(() => {
+    setShowBreakdownManual(true);
+  }, []);
 
   if (!loaded) {
     return (
@@ -821,9 +935,9 @@ export default function LocalChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3rem)] max-w-3xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-oak/8 shrink-0">
+    <div className="flex flex-col min-h-[calc(100vh-6rem)] max-w-3xl mx-auto">
+      {/* Chat title — small, unobtrusive */}
+      <div className="flex items-center gap-3 px-2 py-3 shrink-0">
         <button
           onClick={() => router.push("/")}
           className="p-1.5 rounded-lg text-oak/40 hover:text-oak hover:bg-oak/5 transition-colors"
@@ -843,7 +957,7 @@ export default function LocalChatPage() {
           </div>
         </div>
         <button
-          onClick={() => setShowBreakdown(true)}
+          onClick={openBreakdown}
           className="p-2 rounded-lg text-oak/30 hover:text-moss hover:bg-moss/10 transition-colors"
           title="View Carbon Breakdown"
         >
@@ -851,12 +965,12 @@ export default function LocalChatPage() {
         </button>
       </div>
 
-      {/* Messages area */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+      {/* Messages + animations — main content, grows naturally */}
+      <div className="flex-1 space-y-4 py-6 px-2">
         {/* Empty state */}
-        {messages.length === 0 && status === "ready" && (
+        {messages.length === 0 && phase.type === "idle" && (
           <motion.div
-            className="flex flex-col items-center justify-center h-full text-center"
+            className="flex flex-col items-center justify-center py-20 text-center"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
@@ -875,16 +989,16 @@ export default function LocalChatPage() {
           <MessageBubble key={msg.id} msg={msg} index={i} />
         ))}
 
-        {/* Live optimization sequence */}
+        {/* Optimization animation — shows during optimizing phase */}
         <AnimatePresence>
-          {status === "submitted" && optPhase && (
-            <OptimizationSequence phase={optPhase} region={optRegion} />
+          {phase.type === "optimizing" && (
+            <OptimizationSequence phase={phase.step} region={optRegion} />
           )}
         </AnimatePresence>
 
-        {/* Streaming message */}
+        {/* Streaming response */}
         <AnimatePresence>
-          {status === "streaming" && streamingContent && (
+          {phase.type === "streaming" && phase.content && (
             <motion.div
               className="flex gap-3"
               initial={{ opacity: 0, y: 10 }}
@@ -896,7 +1010,7 @@ export default function LocalChatPage() {
               <div className="flex-1 min-w-0">
                 <div className="inline-block text-left rounded-2xl rounded-tl-md px-4 py-3 text-sm leading-relaxed bg-parchment-dark/60 border border-oak/8 text-oak/80">
                   <div className="whitespace-pre-wrap break-words">
-                    {streamingContent}
+                    {phase.content}
                     <motion.span
                       className="inline-block w-0.5 h-4 bg-moss ml-0.5 align-middle"
                       animate={{ opacity: [1, 0, 1] }}
@@ -905,7 +1019,7 @@ export default function LocalChatPage() {
                   </div>
                 </div>
                 {/* Server comparison appears as response streams */}
-                {streamingContent.length > 50 && (
+                {phase.content.length > 50 && (
                   <ServerComparison chosenRegion={optRegion} />
                 )}
               </div>
@@ -916,8 +1030,8 @@ export default function LocalChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input area */}
-      <div className="shrink-0 px-4 pb-4 pt-2">
+      {/* Sticky input at bottom */}
+      <div className="sticky bottom-0 z-20 pb-4 pt-2 bg-gradient-to-t from-parchment via-parchment to-transparent">
         <SpellBar
           input={input}
           setInput={setInput}
@@ -928,7 +1042,7 @@ export default function LocalChatPage() {
 
       {/* ═══ BREAKDOWN POPUP MODAL ═══ */}
       <AnimatePresence>
-        {showBreakdown && (() => {
+        {isBreakdownVisible && (() => {
           const cm = lastCarbonMeta;
           const assistantMsgs = messages.filter((m) => m.role === "assistant" && m.carbon.cost_g > 0);
           const latestA = cm || (assistantMsgs.length > 0 ? assistantMsgs[assistantMsgs.length - 1].carbon : null);
@@ -957,7 +1071,7 @@ export default function LocalChatPage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                onClick={() => setShowBreakdown(false)}
+                onClick={closeBreakdown}
               />
               {/* Modal */}
               <motion.div
@@ -976,7 +1090,7 @@ export default function LocalChatPage() {
                       <p className="text-[11px] text-oak/40">{chat?.title}</p>
                     </div>
                     <button
-                      onClick={() => setShowBreakdown(false)}
+                      onClick={closeBreakdown}
                       className="p-2 rounded-xl text-oak/30 hover:text-oak hover:bg-oak/5 transition-colors"
                     >
                       <ArrowLeft className="w-4 h-4" />
@@ -1004,6 +1118,29 @@ export default function LocalChatPage() {
                   >
                     <ServerComparison chosenRegion={pRegion} />
                   </motion.div>
+
+                  {/* ═══ SEMANTIC CACHE STATUS ═══ */}
+                  {latestA.cached && (
+                    <motion.div
+                      className="specimen-card p-3 bg-topaz/5 border-topaz/20"
+                      initial={{ opacity: 0, y: 15 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.25 }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-topaz" />
+                        <div className="flex-1">
+                          <h4 className="text-sm font-header text-oak">Semantic Cache Hit</h4>
+                          <p className="text-[10px] text-oak/50 mt-0.5">
+                            {latestA.cache_hit_tokens || 0} tokens retrieved from cache • Instant response
+                          </p>
+                        </div>
+                        <span className="text-xs font-medium text-topaz bg-topaz/10 px-2 py-1 rounded-md">
+                          ⚡ Cached
+                        </span>
+                      </div>
+                    </motion.div>
+                  )}
 
                   {/* ═══ PROMPT COMPRESSION — before/after ═══ */}
                   {originalPrompt && (
@@ -1107,7 +1244,7 @@ export default function LocalChatPage() {
                     transition={{ delay: 0.6 }}
                   >
                     <button
-                      onClick={() => { setShowBreakdown(false); router.push(`/breakdown/${chatId}`); }}
+                      onClick={() => { closeBreakdown(); router.push(`/breakdown/${chatId}`); }}
                       className="text-[11px] text-moss/60 hover:text-moss transition-colors underline underline-offset-2"
                     >
                       View full breakdown →
@@ -1120,5 +1257,25 @@ export default function LocalChatPage() {
         })()}
       </AnimatePresence>
     </div>
+  );
+}
+
+// ─── Main Chat Page (wraps inner in Suspense for useSearchParams) ────────────
+
+export default function LocalChatPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-[80vh]">
+          <motion.div
+            className="w-10 h-10 rounded-full border-2 border-moss/30 border-t-moss"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          />
+        </div>
+      }
+    >
+      <ChatPageInner />
+    </Suspense>
   );
 }

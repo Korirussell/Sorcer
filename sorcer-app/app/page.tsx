@@ -128,9 +128,8 @@ export default function HomePage() {
       region: "auto",
     });
 
-    // Store pending query in sessionStorage — more reliable than URL params
-    sessionStorage.setItem(`pending-query-${chatId}`, prompt);
-    router.push(`/chat/${chatId}`);
+    // Pass query via URL params — survives React Strict Mode double-mount
+    router.push(`/chat/${chatId}?query=${encodeURIComponent(prompt)}`);
   };
 
   const features = [

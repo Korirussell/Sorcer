@@ -68,11 +68,12 @@ function RouteMapVizInner({ model, region, cfePercent }: RouteMapVizProps) {
       });
   }, []);
 
-  // Animation phases
+  // Animation phases: 0=zoomed on Atlanta, 1=show route, 2=full view, 3=zoom to destination
   useEffect(() => {
     const t1 = setTimeout(() => setPhase(1), 800);
     const t2 = setTimeout(() => setPhase(2), 2500);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    const t3 = setTimeout(() => setPhase(3), 4500);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, []);
 
   const midX = (atlPt[0] + destPt[0]) / 2;
@@ -84,10 +85,11 @@ function RouteMapVizInner({ model, region, cfePercent }: RouteMapVizProps) {
     y: atlPt[1] * (1 - t) * (1 - t) + 2 * midY * t * (1 - t) + destPt[1] * t * t,
   }));
 
-  // Viewbox: start zoomed on Atlanta, then zoom out
-  const vbZoomed = `${atlPt[0] - 80} ${atlPt[1] - 50} 160 100`;
+  // Viewbox: start zoomed on Atlanta, then full view, then zoom to destination
+  const vbAtlanta = `${atlPt[0] - 80} ${atlPt[1] - 50} 160 100`;
   const vbFull = `0 0 ${MAP_W} ${MAP_H}`;
-  const viewBox = phase === 0 ? vbZoomed : vbFull;
+  const vbDestination = `${destPt[0] - 80} ${destPt[1] - 50} 160 100`;
+  const viewBox = phase === 0 ? vbAtlanta : phase === 3 ? vbDestination : vbFull;
 
   return (
     <div className="specimen-card p-5 overflow-hidden">

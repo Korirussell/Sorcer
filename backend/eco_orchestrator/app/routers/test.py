@@ -33,7 +33,7 @@ async def test_prompt(req: TestPromptRequest):
     try:
         response = await client.generate(
             prompt=req.prompt,
-            model_id=req.model_id,
+            model_name=req.model_id,
             location=req.location,
         )
     except Exception as e:

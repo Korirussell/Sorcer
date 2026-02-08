@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createChat } from "@/lib/localChatStore";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -295,21 +297,37 @@ function ScrollCard({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function SchedulerPage() {
+  const router = useRouter();
   const [tasks, setTasks] = useState<ScheduledTask[]>(INITIAL_TASKS);
 
   const handleExecute = (id: string) => {
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
+
+    // Create a new chat with this prompt
+    const chatId = crypto.randomUUID();
+    const title = task.prompt.length > 50 ? task.prompt.slice(0, 50) + "..." : task.prompt;
+    
+    createChat({
+      id: chatId,
+      title,
+      createdAt: new Date().toISOString(),
+      carbonSaved: 0,
+      promptCount: 0,
+      model: "auto",
+      region: task.region,
+    });
+
+    // Store the prompt in sessionStorage for the chat page to pick up
+    sessionStorage.setItem(`pending-query-${chatId}`, task.prompt);
+
+    // Mark task as processing
     setTasks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, status: "processing" as TaskStatus } : t))
     );
-    setTimeout(() => {
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === id
-            ? { ...t, status: "completed" as TaskStatus, completedAt: new Date().toISOString(), actualSavings: t.estimatedSavings }
-            : t
-        )
-      );
-    }, 2000);
+
+    // Navigate to the chat page
+    router.push(`/chat/${chatId}`);
   };
 
   const handleCancel = (id: string) => {
