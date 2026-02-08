@@ -183,3 +183,73 @@ export function getLeaderboard(filter?: string) {
 export function getHealth() {
   return apiFetch<{ status: string }>("/health");
 }
+
+
+// ─── Agent ──────────────────────────────────────────────────────────────
+
+export interface ProjectRequest {
+  name: string;
+  description: string;
+  deadline: string;
+  carbon_limit_g: number;
+  prompt: string;
+}
+
+export interface StepPlan {
+  step_number: number;
+  title: string;
+  prompt: string;
+  description: string;
+  model_choice: string;
+  scheduled_window: string;
+  estimated_carbon_g: number;
+  estimated_tokens: number;
+  reasoning: string[];
+}
+
+export interface ProjectPlan {
+  name: string;
+  description: string;
+  deadline: string;
+  carbon_limit_g: number;
+  prompt: string;
+  status: string;
+  total_estimated_carbon_g: number;
+  total_savings_g: number;
+  steps: StepPlan[];
+  inner_monologue: string[];
+}
+
+export function postAgentProject(body: ProjectRequest) {
+  return apiFetch<ProjectPlan>("/agent/project", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+
+// ─── Agent: Execute Step ────────────────────────────────────────────────
+
+export interface ExecuteStepRequest {
+  prompt: string;
+  model_choice: string;
+  step_number: number;
+  title: string;
+}
+
+export interface ExecuteStepResponse {
+  step_number: number;
+  title: string;
+  model_used: string;
+  output: string;
+  elapsed_ms: number;
+  estimated_carbon_g: number;
+  executed_at: string;
+}
+
+export function postExecuteStep(body: ExecuteStepRequest) {
+  return apiFetch<ExecuteStepResponse>("/agent/execute-step", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
