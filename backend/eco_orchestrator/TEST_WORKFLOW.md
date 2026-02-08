@@ -47,10 +47,16 @@ If port 8000 is in use, stop the other process or use `--port 8001`.
 
 Restart the server (or rely on `--reload`). The app now uses **gemini-2.0-flash** (new API); if you still see `gemini-1.5-flash` in errors, the old process is still running.
 
+## Deferral flow (agentic postponement)
+
+1. POST /orchestrate with `is_urgent=false` when grid intensity &gt; 200 → returns `status: deferred`, `task_id`.
+2. Background worker polls every 60s: when grid drops below 200 OR deadline passes → runs LLM, completes task, stores receipt.
+3. Or manually: POST /deferred/execute/{task_id} to run a deferred task immediately.
+
 ## Summary
 
 | Want to…              | Do this |
 |-----------------------|--------|
-| Test orchestrate only | .env with GOOGLE_API_KEY → start uvicorn → POST /orchestrate |
-| Test with DB/worker   | Start Postgres → run `python scripts/seed_db.py` → start uvicorn |
+| Test orchestrate only | .env with Vertex AI creds → start uvicorn → POST /orchestrate |
+| Test deferral/worker  | Start Postgres → `python scripts/seed_db.py` → start uvicorn |
 | Test with cache       | Start Redis → start uvicorn |

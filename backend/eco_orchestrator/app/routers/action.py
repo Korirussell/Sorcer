@@ -5,7 +5,6 @@ from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel
 
 from core.orchestrator import EcoOrchestrator
-from core.receipt_store import set_receipt as store_receipt
 from core.grid_engine import get_default_grid_data
 
 router = APIRouter(tags=["action"])
@@ -67,58 +66,16 @@ async def deferred_execute(task_id: str):
     if task is None or task.get("status") != "deferred":
         raise HTTPException(status_code=404, detail="Task not found or already completed")
 
-    try:
-        prompt_text = task["prompt"]
-        model_tier = task["model_tier"]
-        raw_response = await orchestrator.client.generate(prompt_text, model_tier)
-    except Exception:
-        raise HTTPException(status_code=503, detail="LLM call failed")
-
-    comp = orchestrator.compressor.compress(prompt_text)
-    grid_data = get_default_grid_data()
-    grid_intensity = grid_data["carbon_intensity_g_per_kwh"]
-    grid_source = grid_data["grid_source"]
-    impact = orchestrator.logger.calculate_savings(
-        {
-            "original_tokens": comp["original_count"],
-            "final_tokens": comp["final_count"],
-            "model": model_tier,
-        },
-        grid_intensity,
-    )
-
-    try:
-        await orchestrator.db.complete_task(task_id_int, raw_response, impact)
-    except Exception:
-        raise HTTPException(status_code=503, detail="Failed to complete task in database")
-
-    receipt_id = f"rec_deferred_{task_id}"
-    grid_zone = grid_data.get("zone", "unknown")
-    store_receipt(
-        receipt_id,
-        {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-            "server_location": "us-central1 (Iowa)",
-            "grid_zone": grid_zone,
-            "model_used": model_tier,
-            "baseline_co2_est": impact.get("baseline_co2", 4.2),
-            "actual_co2": impact.get("actual_co2", 1.8),
-            "net_savings": impact.get("co2_saved_grams", 2.4),
-            "efficiency_multiplier": impact.get("efficiency_multiplier"),
-            "wh_saved": impact.get("wh_saved"),
-            "was_cached": False,
-            "energy_kwh": impact.get("energy_kwh", 0.004),
-            "grid_source": grid_source,
-        },
-    )
+    result = await orchestrator.execute_deferred_task(task)
+    if result is None:
+        raise HTTPException(status_code=503, detail="Deferred task execution failed")
 
     return {
         "status": "complete",
         "new_eta": datetime.utcnow().isoformat() + "Z",
-        "current_grid_intensity": grid_intensity,
-        "response": raw_response,
-        "receipt_id": receipt_id,
-        "eco_stats": impact,
+        "response": result["response"],
+        "receipt_id": result["receipt_id"],
+        "eco_stats": result["eco_stats"],
     }
 
 

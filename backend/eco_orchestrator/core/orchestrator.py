@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from core.compression import EcoCompressor
 from core.classifier import ComplexityScorer
@@ -57,7 +57,7 @@ class EcoOrchestrator:
         grid_source_label = grid_data.get("_source", "?")
         GRID_THRESHOLD = int(os.getenv("GRID_THRESHOLD", "200"))
         logger.info(f"Orchestrator grid | zone={grid_zone} | intensity={grid_intensity} g/kWh | source={grid_source_label} | defer_threshold={GRID_THRESHOLD}")
-        deadline = getattr(req, "deadline", None) or (datetime.utcnow() + timedelta(hours=24))
+        deadline = getattr(req, "deadline", None) or (datetime.now(timezone.utc) + timedelta(hours=24))
         if not getattr(req, "is_urgent", False) and grid_intensity > GRID_THRESHOLD:
             try:
                 task_id = await self.db.add_task_to_queue(
@@ -88,7 +88,7 @@ class EcoOrchestrator:
         store_receipt(
             receipt_id,
             {
-                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 "server_location": "us-central1 (Iowa)",
                 "grid_zone": grid_zone,
                 "model_used": tier,
@@ -114,3 +114,55 @@ class EcoOrchestrator:
             "receipt_id": receipt_id,
             "eco_stats": impact,
         }
+
+    async def execute_deferred_task(self, task: dict) -> dict | None:
+        """
+        Execute a deferred task: run LLM, complete_task, store_receipt.
+        Used by worker and POST /deferred/execute. Returns receipt_id and impact, or None on failure.
+        """
+        task_id = task["id"]
+        prompt_text = task["prompt"]
+        model_tier = task["model_tier"]
+        try:
+            raw_response = await self.client.generate(prompt_text, model_tier)
+        except Exception as e:
+            logger.error(f"Deferred task {task_id} LLM failed: {e}")
+            return None
+        comp = self.compressor.compress(prompt_text)
+        grid_data = get_default_grid_data()
+        grid_intensity = grid_data["carbon_intensity_g_per_kwh"]
+        grid_source = grid_data["grid_source"]
+        grid_zone = grid_data.get("zone", "unknown")
+        impact = self.logger.calculate_savings(
+            {
+                "original_tokens": comp["original_count"],
+                "final_tokens": comp["final_count"],
+                "model": model_tier,
+            },
+            grid_intensity,
+        )
+        try:
+            await self.db.complete_task(task_id, raw_response, impact)
+        except Exception as e:
+            logger.error(f"Deferred task {task_id} complete_task failed: {e}")
+            return None
+        receipt_id = f"rec_deferred_{task_id}"
+        store_receipt(
+            receipt_id,
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "server_location": "us-central1 (Iowa)",
+                "grid_zone": grid_zone,
+                "model_used": model_tier,
+                "baseline_co2_est": impact.get("baseline_co2", 4.2),
+                "actual_co2": impact.get("actual_co2", 1.8),
+                "net_savings": impact.get("co2_saved_grams", 2.4),
+                "efficiency_multiplier": impact.get("efficiency_multiplier"),
+                "wh_saved": impact.get("wh_saved"),
+                "was_cached": False,
+                "energy_kwh": impact.get("energy_kwh", 0.004),
+                "grid_source": grid_source,
+            },
+        )
+        logger.info(f"Deferred task {task_id} completed | receipt_id={receipt_id}")
+        return {"receipt_id": receipt_id, "response": raw_response, "eco_stats": impact}

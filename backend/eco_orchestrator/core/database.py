@@ -1,10 +1,10 @@
 import asyncpg
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 class EcoDatabase:
     def __init__(self):
-        self.dsn = os.getenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/eco_db")
+        self.dsn = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/eco_db")
 
     async def add_task_to_queue(self, prompt, model, deadline, target):
         conn = await asyncpg.connect(self.dsn)
@@ -30,12 +30,15 @@ class EcoDatabase:
 
     async def get_runnable_tasks(self, current_intensity):
         conn = await asyncpg.connect(self.dsn)
-        # Select tasks that are green-ready OR passed their hard deadline
+        now = datetime.now(timezone.utc)
+        # Run when: grid is green (current <= target) OR deadline passed
         rows = await conn.fetch('''
-            SELECT * FROM tasks 
+            SELECT id, prompt, model_tier, deadline, target_intensity, status 
+            FROM tasks 
             WHERE status = 'deferred' 
             AND (target_intensity >= $1 OR deadline <= $2)
-        ''', current_intensity, datetime.utcnow())
+            ORDER BY deadline ASC
+        ''', current_intensity, now)
         await conn.close()
         return rows
 

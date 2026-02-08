@@ -19,7 +19,7 @@ load_dotenv(_root / ".env")
 
 import asyncpg
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/eco_db")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/eco_db")
 
 TASKS_TABLE = """
 CREATE TABLE IF NOT EXISTS tasks (
