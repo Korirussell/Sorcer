@@ -119,6 +119,7 @@ function StepCard({
 }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const Icon = PHASE_ICONS[step.title] || FlaskConical;
   const share = totalCarbon > 0 ? (step.estimated_carbon_g / totalCarbon) * 100 : 0;
   const isDone = !!result;
@@ -278,8 +279,19 @@ function StepCard({
                       {copied ? "Copied" : "Copy"}
                     </button>
                   </div>
-                  <div className="enchanted-terminal p-4 text-[11px] leading-relaxed max-h-64 overflow-y-auto whitespace-pre-wrap">
-                    {result.output}
+                  <div className="relative group">
+                    <div className={`enchanted-terminal p-4 text-[12px] leading-relaxed overflow-y-auto whitespace-pre-wrap scroll-smooth transition-[max-height] duration-300 ${expanded ? "max-h-[80vh]" : "max-h-[24rem]"}`}>
+                      {result.output}
+                    </div>
+                    {/* Fade hint + expand toggle */}
+                    <div className="flex items-center justify-center gap-2 pt-2">
+                      <button
+                        onClick={() => setExpanded((e) => !e)}
+                        className="text-[10px] text-oak/30 hover:text-oak/60 transition-colors px-3 py-1 rounded-lg hover:bg-oak/5"
+                      >
+                        {expanded ? "Collapse output" : "Expand output"}
+                      </button>
+                    </div>
                   </div>
                   <div className="flex items-center gap-4 mt-2 text-[10px] text-oak/30">
                     <span>Model: <span className="text-oak/50 font-mono">{result.model_used}</span></span>
