@@ -203,6 +203,8 @@ def get_grid_map() -> dict:
         {"em_zone": "US-NY-NYIS",   "wt_region": "NYISO_NYC"},
         {"em_zone": "US-MIDW-MISO", "wt_region": "PJM_CHICAGO"},
         {"em_zone": "US-SE-SOCO",   "wt_region": "SOCO"},
+        {"em_zone": "US-NW-PACW",   "wt_region": "PACW"},         # Pacific NW (The Dalles, Hillsboro, Quincy)
+        {"em_zone": "US-SW-AZPS",   "wt_region": "AZPS"},         # Arizona (Phoenix)
     ]
 
     raw_snapshots = get_multi_region_data(default_regions)
@@ -214,22 +216,27 @@ def get_grid_map() -> dict:
 
 
 def _intensity_to_score(intensity_g_per_kwh: float | None) -> int:
-    """Convert carbon intensity (g/kWh) to 0-100 sustainability score. Lower intensity = higher score."""
+    """Convert carbon intensity (g/kWh) to 0-100 sustainability score.
+
+    Lower intensity = higher score.  ~0 → 100, ~1000+ → 0.
+    Returns 50 (neutral) when intensity data is unavailable.
+    """
     if intensity_g_per_kwh is None:
         return 50
     if intensity_g_per_kwh <= 0:
         return 100
-    score = max(0, 100 - (intensity_g_per_kwh / 10))
-    return int(min(100, score))
+    score = max(0, min(100, 100 - (intensity_g_per_kwh / 10)))
+    return int(score)
 
 
 def _snapshot_to_map_region(snap: dict) -> dict:
     """Transform snapshot to API format: name, score, breakdown."""
     zone = snap.get("zone", "unknown")
     intensity = snap.get("carbon_intensity_g_per_kwh")
-    score = snap.get("watttime_percentile")
-    if score is not None:
-        score = int(100 - score)  # invert: lower percentile = cleaner
+    wt_percentile = snap.get("watttime_percentile")
+    if wt_percentile is not None:
+        # Invert: lower percentile = cleaner grid = higher score. Clamp to 0-100.
+        score = int(max(0, min(100, 100 - wt_percentile)))
     else:
         score = _intensity_to_score(intensity)
     prod = snap.get("production_breakdown") or snap.get("consumption_breakdown")

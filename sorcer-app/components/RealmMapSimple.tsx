@@ -367,15 +367,15 @@ function RealmMapInner() {
         }
         // Merge: update static DCs with live scores where zone matches
         const ZONE_MAP: Record<string, string> = {
-          "The Dalles": "US-CAL-CISO",
-          "Hillsboro": "US-CAL-CISO",
+          "The Dalles": "US-NW-PACW",      // Pacific NW (hydro-heavy)
+          "Hillsboro": "US-NW-PACW",       // Pacific NW (hydro-heavy)
+          "Quincy": "US-NW-PACW",           // Pacific NW (hydro-heavy)
           "Council Bluffs": "US-MIDW-MISO",
           "Chicago": "US-MIDW-MISO",
           "Ashburn": "US-NY-NYIS",
           "Dallas": "US-TEX-ERCO",
-          "Phoenix": "US-TEX-ERCO",
+          "Phoenix": "US-SW-AZPS",          // Arizona grid
           "San Jose": "US-CAL-CISO",
-          "Quincy": "US-CAL-CISO",
           "Mayes County": "US-SE-SOCO",
         };
         setLiveDCs(DATA_CENTERS.map((dc) => {
