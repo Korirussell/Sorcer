@@ -14,7 +14,7 @@ const metadataBaseUrl = process.env.NEXT_PUBLIC_SITE_URL
 
 export const metadata: Metadata = {
   metadataBase: metadataBaseUrl,
-  title: "Sorcer - AI Carbon Arbitrage Engine",
+  title: "Sorcer - AI Carbon Routing Engine",
   description:
     "Route prompts to the cleanest available intelligence using real-time carbon and weather signals.",
 };

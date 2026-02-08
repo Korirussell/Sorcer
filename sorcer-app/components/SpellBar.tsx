@@ -2,12 +2,13 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Send, Leaf, Zap, Flame, Sprout, ChevronDown, Clock } from "lucide-react";
-import { toast } from "sonner";
+import React from "react";
+import { Send, Leaf, Zap, Sprout, ChevronDown, Brain, Bot, Sparkles, Mic } from "lucide-react";
+import { VoiceSession } from "@/components/VoiceMode";
 import { useEnergy } from "@/context/EnergyContext";
 import { SearchVines } from "./SearchVines";
 import { InkSplashButton } from "./InkSplash";
-import { postOrchestrate } from "@/utils/api";
+import { chatModels, modelsByProvider } from "@/lib/ai/models";
 
 function setCookie(name: string, value: string) {
   const maxAge = 60 * 60 * 24 * 365;
@@ -15,11 +16,21 @@ function setCookie(name: string, value: string) {
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}`;
 }
 
-const SCHEDULE_OPTIONS = [
-  { label: "Next 6 hours", value: "6h" },
-  { label: "Tonight", value: "tonight" },
-  { label: "When grid is cleanest", value: "optimal" },
-];
+const PROVIDER_ICONS: Record<string, typeof Leaf> = {
+  anthropic: Brain,
+  openai: Sparkles,
+  google: Leaf,
+  xai: Zap,
+  reasoning: Bot,
+};
+
+const PROVIDER_LABELS: Record<string, string> = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  google: "Google",
+  xai: "xAI",
+  reasoning: "Reasoning",
+};
 
 export function SpellBar({
   input,
@@ -35,15 +46,13 @@ export function SpellBar({
   enableScheduling?: boolean;
 }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const { mode, selectedModelId, setMode, setSelectedModelId } = useEnergy();
 
   // Portal positioning for dropdown (escapes overflow:hidden)
   const modelBtnRef = useRef<HTMLButtonElement>(null);
-  const scheduleBtnRef = useRef<HTMLButtonElement>(null);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
-  const [schedulePos, setSchedulePos] = useState<{ top: number; right: number } | null>(null);
 
   const updateDropdownPos = useCallback(() => {
     if (modelBtnRef.current) {
@@ -52,20 +61,9 @@ export function SpellBar({
     }
   }, []);
 
-  const updateSchedulePos = useCallback(() => {
-    if (scheduleBtnRef.current) {
-      const rect = scheduleBtnRef.current.getBoundingClientRect();
-      setSchedulePos({ top: rect.top - 8, right: window.innerWidth - rect.right });
-    }
-  }, []);
-
   useEffect(() => {
     if (isDropdownOpen) updateDropdownPos();
   }, [isDropdownOpen, updateDropdownPos]);
-
-  useEffect(() => {
-    if (isScheduleOpen) updateSchedulePos();
-  }, [isScheduleOpen, updateSchedulePos]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,13 +72,8 @@ export function SpellBar({
     }
   };
 
-  const models = [
-    { id: "google/gemini-2.5-flash-lite", name: "Eco", icon: Leaf, description: "98% Clean Energy", color: "text-moss" },
-    { id: "anthropic/claude-haiku-4.5", name: "Balanced", icon: Zap, description: "Fast / Low Carbon", color: "text-topaz" },
-    { id: "openai/gpt-5.2", name: "Power", icon: Flame, description: "High Performance", color: "text-witchberry" },
-  ];
-
-  const selectedModel = selectedModelId ? models.find((m) => m.id === selectedModelId) : null;
+  const selectedModel = selectedModelId ? chatModels.find((m) => m.id === selectedModelId) : null;
+  const selectedIcon = selectedModel ? (PROVIDER_ICONS[selectedModel.provider] || Bot) : null;
 
   const handleModelChange = (modelId: string) => {
     setSelectedModelId(modelId);
@@ -90,7 +83,7 @@ export function SpellBar({
 
   const switchToManual = () => {
     setMode("manual");
-    if (!selectedModelId) setSelectedModelId(models[0].id);
+    if (!selectedModelId) setSelectedModelId(chatModels[0].id);
     setIsDropdownOpen(false);
   };
 
@@ -140,7 +133,7 @@ export function SpellBar({
                 </>
               ) : (
                 <>
-                  {selectedModel && <selectedModel.icon className={`w-3.5 h-3.5 ${selectedModel.color}`} />}
+                  {selectedIcon && <>{React.createElement(selectedIcon, { className: "w-3.5 h-3.5 text-oak/60" })}</>}
                   <span>{selectedModel?.name || "Select"}</span>
                 </>
               )}
@@ -156,33 +149,21 @@ export function SpellBar({
             onChange={(e) => setInput(e.target.value)}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            placeholder="Ask the Oracle..."
+            placeholder="Ask Sorcer..."
             disabled={isLoading}
             data-spellbar
             className="flex-1 px-3 py-2.5 bg-transparent text-oak placeholder:text-oak/30 focus:outline-none text-sm"
           />
 
-          {/* Schedule dropdown */}
-          {enableScheduling && (
-            <div className="relative">
-              <button
-                ref={scheduleBtnRef}
-                type="button"
-                disabled={!input.trim() || status !== "ready"}
-                onClick={() => setIsScheduleOpen(!isScheduleOpen)}
-                className={`
-                  w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200
-                  ${input.trim() && status === "ready"
-                    ? "bg-topaz/15 text-topaz border border-topaz/20 hover:bg-topaz/25 active:scale-95"
-                    : "bg-oak/5 text-oak/15 cursor-not-allowed"
-                  }
-                `}
-                title="Schedule for later"
-              >
-                <Clock className="w-4 h-4" />
-              </button>
-            </div>
-          )}
+          {/* Voice mode button */}
+          <button
+            type="button"
+            onClick={() => setVoiceOpen(true)}
+            className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 bg-oak/5 text-oak/30 hover:text-moss hover:bg-moss/10 border border-oak/8 hover:border-moss/20"
+            title="Voice mode"
+          >
+            <Mic className="w-4 h-4" />
+          </button>
 
           {/* Submit — Magic Orb mini with ink splash */}
           <InkSplashButton
@@ -222,7 +203,7 @@ export function SpellBar({
             className="fixed z-[9991] w-64 bg-[#fffbf0] border border-[#5c4033]/30 rounded-2xl shadow-lg overflow-hidden"
             style={{ top: dropdownPos.top, left: dropdownPos.left, transform: 'translateY(-100%)' }}
           >
-            <div className="p-2">
+            <div className="p-2 max-h-[400px] overflow-y-auto [scrollbar-width:thin] [scrollbar-color:rgba(160,160,136,0.4)_transparent]">
               <button
                 type="button"
                 onClick={switchToAuto}
@@ -236,38 +217,47 @@ export function SpellBar({
                 </div>
                 <div className="flex-1">
                   <div className="text-sm font-medium text-oak">Auto Sustainable</div>
-                  <div className="text-[11px] text-oak-light/50">Oracle selects cleanest model</div>
+                  <div className="text-[11px] text-oak-light/50">Sorcer finds cleanest energy source</div>
                 </div>
                 {mode === "auto" && <div className="w-2 h-2 rounded-full bg-moss" />}
               </button>
 
-              <div className="my-1.5 mx-3 border-t border-oak/8" />
-              <div className="px-3 py-1 text-[10px] font-medium text-oak/30 uppercase tracking-wider">Manual</div>
-
-              {models.map((model) => {
-                const isSelected = mode === "manual" && model.id === selectedModelId;
+              {Object.entries(modelsByProvider).map(([provider, providerModels]) => {
+                const ProvIcon = PROVIDER_ICONS[provider] || Bot;
                 return (
-                  <button
-                    type="button"
-                    key={model.id}
-                    onClick={() => {
-                      if (mode !== "manual") switchToManual();
-                      handleModelChange(model.id);
-                    }}
-                    className={`
-                      w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-200
-                      ${isSelected ? "bg-oak/5 border border-oak/10" : "hover:bg-oak/5"}
-                    `}
-                  >
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isSelected ? "bg-oak/10" : "bg-oak/5"}`}>
-                      <model.icon className={`w-4 h-4 ${model.color}`} />
+                  <div key={provider}>
+                    <div className="my-1.5 mx-3 border-t border-oak/8" />
+                    <div className="px-3 py-1 text-[10px] font-medium text-oak/30 uppercase tracking-wider flex items-center gap-1.5">
+                      <ProvIcon className="w-3 h-3" />
+                      {PROVIDER_LABELS[provider] || provider}
                     </div>
-                    <div className="flex-1">
-                      <div className="text-sm font-medium text-oak">{model.name}</div>
-                      <div className="text-[11px] text-oak-light/50">{model.description}</div>
-                    </div>
-                    {isSelected && <div className={`w-2 h-2 rounded-full ${model.color.replace("text-", "bg-")}`} />}
-                  </button>
+                    {providerModels.map((model) => {
+                      const isSelected = mode === "manual" && model.id === selectedModelId;
+                      return (
+                        <button
+                          type="button"
+                          key={model.id}
+                          onClick={() => {
+                            if (mode !== "manual") switchToManual();
+                            handleModelChange(model.id);
+                          }}
+                          className={`
+                            w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-all duration-200
+                            ${isSelected ? "bg-oak/5 border border-oak/10" : "hover:bg-oak/5"}
+                          `}
+                        >
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isSelected ? "bg-oak/10" : "bg-oak/5"}`}>
+                            <ProvIcon className={`w-4 h-4 ${isSelected ? "text-moss" : "text-oak/40"}`} />
+                          </div>
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-oak">{model.name}</div>
+                            <div className="text-[11px] text-oak-light/50">{model.description}</div>
+                          </div>
+                          {isSelected && <div className="w-2 h-2 rounded-full bg-moss" />}
+                        </button>
+                      );
+                    })}
+                  </div>
                 );
               })}
             </div>
@@ -276,67 +266,8 @@ export function SpellBar({
         document.body
       )}
 
-      {isScheduleOpen && schedulePos && createPortal(
-        <>
-          <div className="fixed inset-0 z-[9990]" onClick={() => setIsScheduleOpen(false)} />
-          <div
-            className="fixed z-[9991] w-52 bg-parchment border border-oak/15 rounded-xl shadow-lg overflow-hidden"
-            style={{ top: schedulePos.top, right: schedulePos.right, transform: 'translateY(-100%)' }}
-          >
-            <div className="px-3 py-2 text-[10px] font-medium text-oak/40 uppercase tracking-wider border-b border-oak/8">Schedule for Later</div>
-            {SCHEDULE_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={async () => {
-                  if (!input.trim()) return;
-                  const prompt = input.trim();
-                  setInput("");
-                  setIsScheduleOpen(false);
-                  // Compute deadline from schedule option
-                  const now = new Date();
-                  let deadline: string;
-                  if (opt.value === "6h") {
-                    deadline = new Date(now.getTime() + 6 * 3600000).toISOString();
-                  } else if (opt.value === "tonight") {
-                    const tonight = new Date(now);
-                    tonight.setHours(23, 0, 0, 0);
-                    deadline = tonight.toISOString();
-                  } else {
-                    deadline = new Date(now.getTime() + 24 * 3600000).toISOString();
-                  }
-                  try {
-                    const result = await postOrchestrate({
-                      prompt,
-                      user_id: "sorcer-user",
-                      project_id: "scheduled",
-                      deadline,
-                    });
-                    if (result.deferred) {
-                      toast.success(`Prompt scheduled: ${opt.label}`, {
-                        description: `Task #${result.task_id} queued — will run when grid is cleaner`,
-                      });
-                    } else {
-                      toast.success("Prompt executed immediately", {
-                        description: "Grid was already clean enough!",
-                      });
-                    }
-                  } catch {
-                    toast.error("Backend offline", {
-                      description: "Scheduling requires the backend. Start it and try again.",
-                    });
-                  }
-                }}
-                className="w-full text-left px-3 py-2.5 text-sm text-oak hover:bg-moss/8 transition-colors flex items-center gap-2"
-              >
-                <Clock className="w-3 h-3 text-topaz" />
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </>,
-        document.body
-      )}
+      {/* Voice session overlay */}
+      <VoiceSession isOpen={voiceOpen} onClose={() => setVoiceOpen(false)} />
     </div>
   );
 }

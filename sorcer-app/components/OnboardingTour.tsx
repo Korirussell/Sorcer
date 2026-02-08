@@ -15,7 +15,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     target: "[data-spellbar]",
     title: "The Spell Bar",
-    description: "Type your prompt here — the Oracle will route it to the cleanest available model.",
+    description: "Type your prompt here — Sorcer will find the most sustainable energy source for your query.",
     position: "bottom",
   },
   {

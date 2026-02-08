@@ -497,7 +497,7 @@ function RealmMapInner() {
           </div>
         </div>
         <p className="text-center text-[10px] text-oak/30 mt-3 font-sub">
-          Data sourced from the Oracle — real-time carbon intelligence
+          Data sourced from Sorcer — real-time sustainable energy intelligence
         </p>
       </div>
     </div>

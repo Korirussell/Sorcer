@@ -53,41 +53,46 @@ function buildLiveStats() {
 function buildReceiptsFromChats(): ReceiptData[] {
   const chats = getAllChats();
   const receipts: ReceiptData[] = [];
+  const regionBreakdowns: Record<string, { source: string; pct: number; color: string }[]> = {
+    "us-central1": [{ source: "Wind", pct: 65, color: "#6B9E6F" }, { source: "Solar", pct: 25, color: "#DDA059" }, { source: "Gas", pct: 10, color: "#A08060" }],
+    "us-west1": [{ source: "Hydro", pct: 55, color: "#4a8ab5" }, { source: "Wind", pct: 30, color: "#6B9E6F" }, { source: "Gas", pct: 15, color: "#A08060" }],
+    "europe-west1": [{ source: "Nuclear", pct: 40, color: "#9B7EC8" }, { source: "Wind", pct: 35, color: "#6B9E6F" }, { source: "Gas", pct: 25, color: "#A08060" }],
+  };
   for (const chat of chats) {
     const msgs = getMessages(chat.id);
-    for (const m of msgs) {
-      if (m.role !== "assistant" || !m.carbon) continue;
+    const userMsgs = msgs.filter(x => x.role === "user");
+    const assistantMsgs = msgs.filter(x => x.role === "assistant");
+    for (let i = 0; i < assistantMsgs.length; i++) {
+      const m = assistantMsgs[i];
+      if (!m.carbon) continue;
       const c = m.carbon;
+      // Skip messages with completely zeroed-out carbon (no real data)
+      if (c.cost_g === 0 && c.baseline_g === 0 && c.saved_g === 0 && !c.cached) continue;
       const eco = c.saved_g > 0;
       const modelLabel = (c.model || "unknown").split("/").pop() || c.model;
-      // Build energy breakdown from region
-      const regionBreakdowns: Record<string, { source: string; pct: number; color: string }[]> = {
-        "us-central1": [{ source: "Wind", pct: 65, color: "#6B9E6F" }, { source: "Solar", pct: 25, color: "#DDA059" }, { source: "Gas", pct: 10, color: "#A08060" }],
-        "us-west1": [{ source: "Hydro", pct: 55, color: "#4a8ab5" }, { source: "Wind", pct: 30, color: "#6B9E6F" }, { source: "Gas", pct: 15, color: "#A08060" }],
-        "europe-west1": [{ source: "Nuclear", pct: 40, color: "#9B7EC8" }, { source: "Wind", pct: 35, color: "#6B9E6F" }, { source: "Gas", pct: 25, color: "#A08060" }],
-      };
       const breakdown = regionBreakdowns[c.region] || [{ source: "Mixed", pct: 100, color: "#A08060" }];
       const timeDiff = Date.now() - new Date(m.createdAt).getTime();
       const hoursAgo = Math.floor(timeDiff / 3600000);
       const timestamp = hoursAgo < 1 ? "just now" : hoursAgo < 24 ? `${hoursAgo}h ago` : `${Math.floor(hoursAgo / 24)}d ago`;
+      const userPrompt = userMsgs[i]?.content.slice(0, 80) || "Prompt";
 
       receipts.push({
         id: m.id,
-        prompt: msgs.find((x) => x.role === "user" && new Date(x.createdAt) < new Date(m.createdAt))?.content.slice(0, 80) || "Prompt",
+        prompt: userPrompt,
         model: modelLabel,
         region: c.region || "auto",
-        carbonCost: c.cost_g / 1000,
-        carbonSaved: c.saved_g / 1000,
+        carbonCost: c.cost_g,
+        carbonSaved: c.saved_g,
         timestamp,
         eco,
         energyBreakdown: breakdown,
-        baselineCost: c.baseline_g / 1000,
+        baselineCost: c.baseline_g,
         tokens: c.tokens_in + c.tokens_out,
         latency: `${(c.latency_ms / 1000).toFixed(1)}s`,
       });
     }
   }
-  return receipts.slice(0, 10); // Show most recent 10
+  return receipts.reverse().slice(0, 20);
 }
 
 // Fallback weekly/monthly data (would come from backend analytics in production)
@@ -258,17 +263,17 @@ function ReceiptDetailModal({ receipt, onClose }: { receipt: ReceiptData; onClos
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-oak/60">Carbon Cost</span>
-              <span className="font-medium text-oak tabular-nums">{receipt.carbonCost.toFixed(3)} kg</span>
+              <span className="font-medium text-oak tabular-nums">{receipt.carbonCost.toFixed(2)}g</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-oak/60">Baseline Cost</span>
-              <span className="font-medium text-oak/40 tabular-nums line-through">{receipt.baselineCost.toFixed(3)} kg</span>
+              <span className="font-medium text-oak/40 tabular-nums line-through">{receipt.baselineCost.toFixed(2)}g</span>
             </div>
             <div className="h-px bg-oak/10" />
             <div className="flex justify-between text-sm">
               <span className={receipt.eco ? "text-moss font-medium" : "text-witchberry/60"}>Carbon Saved</span>
               <span className={`font-medium tabular-nums ${receipt.eco ? "text-moss" : "text-witchberry/60"}`}>
-                {receipt.eco ? `-${receipt.carbonSaved.toFixed(3)} kg` : "0.000 kg"}
+                {receipt.eco ? `-${receipt.carbonSaved.toFixed(2)}g` : "0.00g"}
               </span>
             </div>
             {receipt.eco && (
@@ -331,7 +336,7 @@ function ReceiptDetailModal({ receipt, onClose }: { receipt: ReceiptData; onClos
               <div>
                 <div className="flex justify-between text-[10px] mb-0.5">
                   <span className="text-oak/40">This prompt</span>
-                  <span className="text-moss">{receipt.carbonCost.toFixed(3)} kg</span>
+                  <span className="text-moss">{receipt.carbonCost.toFixed(2)}g</span>
                 </div>
                 <div className="h-2 rounded-full bg-oak/8 overflow-hidden">
                   <motion.div className="h-full rounded-full bg-moss/60"
@@ -342,7 +347,7 @@ function ReceiptDetailModal({ receipt, onClose }: { receipt: ReceiptData; onClos
               <div>
                 <div className="flex justify-between text-[10px] mb-0.5">
                   <span className="text-oak/40">Baseline (dirty grid)</span>
-                  <span className="text-witchberry/50">{receipt.baselineCost.toFixed(3)} kg</span>
+                  <span className="text-witchberry/50">{receipt.baselineCost.toFixed(2)}g</span>
                 </div>
                 <div className="h-2 rounded-full bg-oak/8 overflow-hidden">
                   <div className="h-full rounded-full bg-witchberry/30" style={{ width: "100%" }} />
@@ -436,32 +441,6 @@ export default function LedgerPage() {
         </div>
       </motion.div>
 
-      {/* ── Monthly Trend ── */}
-      <motion.div
-        className="specimen-card p-5 mb-6"
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
-      >
-        <h3 className="text-[10px] text-oak/40 uppercase tracking-wider mb-3">Monthly Trend</h3>
-        <MonthlyTrend data={MONTHLY_DATA} />
-      </motion.div>
-
-      {/* ── Carbon Budget ── */}
-      <motion.div
-        className="specimen-card p-5 mb-6"
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.2 }}
-      >
-        <div className="flex items-center gap-2 mb-3">
-          <ShieldCheck className="w-4 h-4 text-moss" />
-          <h3 className="text-sm font-medium text-oak">Carbon Budget</h3>
-          <span className="text-[10px] text-oak/30 ml-auto">project: sorcer-main</span>
-        </div>
-        <BudgetGauge budget={budget} />
-      </motion.div>
-
       {/* ── Receipt History ── */}
       <motion.div
         className="specimen-card overflow-hidden"
@@ -501,10 +480,10 @@ export default function LedgerPage() {
                     <AlertTriangle className="w-3 h-3 text-witchberry/50" />
                   )}
                   <span className={`text-xs font-medium tabular-nums ${receipt.eco ? "text-moss" : "text-witchberry/60"}`}>
-                    {receipt.eco ? `-${receipt.carbonSaved.toFixed(2)}kg` : `+${receipt.carbonCost.toFixed(2)}kg`}
+                    {receipt.eco ? `-${receipt.carbonSaved.toFixed(2)}g` : `+${receipt.carbonCost.toFixed(2)}g`}
                   </span>
                 </div>
-                <span className="text-[9px] text-oak/30">cost: {receipt.carbonCost.toFixed(2)}kg</span>
+                <span className="text-[9px] text-oak/30">cost: {receipt.carbonCost.toFixed(2)}g</span>
               </div>
             </div>
           </button>

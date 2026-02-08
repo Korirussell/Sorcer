@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { SpellBar } from "@/components/SpellBar";
+import { VoiceMode } from "@/components/VoiceMode";
 import { CacheTimeline } from "@/components/CacheTimeline";
 import { useEnergy } from "@/context/EnergyContext";
 
@@ -39,7 +40,7 @@ const DUMMY_RESPONSES: Record<string, string> = {
 
 By routing your prompt to **us-west1**, Sorcer saved approximately **0.42g CO₂** compared to a default deployment. That's a **78% reduction** — just by choosing the right data center.
 
-The key insight: renewable energy availability varies dramatically by region and time of day. Sorcer's Carbon Oracle monitors these signals in real-time to make optimal routing decisions.`,
+The key insight: renewable energy availability varies dramatically by region and time of day. Sorcer monitors these signals in real-time to find the most sustainable energy source for every query.`,
 
   code: `Here's an optimized solution:
 
@@ -76,11 +77,11 @@ This approach uses async processing to batch requests efficiently, reducing both
 
 3. **Smart caching helps** — Sorcer's prompt caching system reuses previously computed context, saving both compute and carbon. In this conversation, we've already cached several context tokens.
 
-4. **Model selection** — Not every query needs the most powerful model. Sorcer's Oracle analyzes query complexity and routes to the most efficient model that can handle it well.
+4. **Model selection** — Not every query needs the most powerful model. Sorcer analyzes query complexity and finds the most sustainable energy source that can handle it well.
 
 The bottom line: sustainable AI isn't about doing less — it's about being smarter about *how* we compute.`,
 
-  hello: `Hello! 👋 Welcome to Sorcer — the Carbon Arbitrage Engine.
+  hello: `Hello! 👋 Welcome to Sorcer — the Carbon Routing Engine.
 
 I'm here to help you with anything while keeping our carbon footprint minimal. Here's what makes this conversation special:
 
@@ -113,6 +114,8 @@ function makeDummyCarbonMeta(): CarbonMeta {
   const cfeMap: Record<string, number> = { "us-central1": 89, "us-west1": 92, "europe-west1": 82 };
   const baseline = 0.4 + Math.random() * 0.7;
   const cost = baseline * (0.15 + Math.random() * 0.25);
+  // Only cache 15% of the time instead of 60%
+  const isCached = Math.random() > 0.85;
   return {
     cost_g: Math.round(cost * 100) / 100,
     baseline_g: Math.round(baseline * 100) / 100,
@@ -122,8 +125,8 @@ function makeDummyCarbonMeta(): CarbonMeta {
     tokens_in: 10 + Math.floor(Math.random() * 30),
     tokens_out: 200 + Math.floor(Math.random() * 600),
     latency_ms: 600 + Math.floor(Math.random() * 2000),
-    cached: Math.random() > 0.4,
-    cache_hit_tokens: Math.floor(Math.random() * 300),
+    cached: isCached,
+    cache_hit_tokens: isCached ? Math.floor(Math.random() * 300) : 0,
     compressed: Math.random() > 0.5,
     original_tokens: 20, compressed_tokens: 14,
     compression_ratio: 0.6 + Math.random() * 0.3,
@@ -134,22 +137,35 @@ function makeDummyCarbonMeta(): CarbonMeta {
 // BACKEND INTEGRATION
 // ═══════════════════════════════════════════════════════════════════════════════
 
+interface BackendResult {
+  response: string;
+  carbonMeta: CarbonMeta;
+  compressedPrompt?: string;
+  wasCached?: boolean;
+  cacheType?: "hash" | "semantic" | null;
+  inputTokens?: number;
+  compressedTokens?: number;
+}
+
 function mapBackendToCarbonMeta(
   ecoStats: Record<string, unknown>,
   receipt: Record<string, unknown> | null,
   prompt: string, response: string,
+  apiWasCached?: boolean,
+  apiInputTokens?: number,
+  apiCompressedTokens?: number,
 ): CarbonMeta {
   const baselineCo2 = Number(ecoStats.baseline_co2 ?? receipt?.baseline_co2_est ?? 0.5);
   const actualCo2 = Number(ecoStats.actual_co2 ?? receipt?.actual_co2 ?? 0.1);
   const savedCo2 = Number(ecoStats.co2_saved_grams ?? receipt?.net_savings ?? baselineCo2 - actualCo2);
-  const wasCached = Boolean(ecoStats.was_cached ?? receipt?.was_cached ?? false);
+  const wasCached = apiWasCached ?? Boolean(ecoStats.was_cached ?? receipt?.was_cached ?? false);
   const model = String(receipt?.model_used ?? ecoStats.model ?? "gemini-2.0-flash");
   const region = String(receipt?.server_location ?? "us-central1").split(" ")[0];
   const cfeMap: Record<string, number> = { "us-central1": 89, "us-west1": 92, "europe-west1": 82 };
-  const tokensIn = prompt.split(/\s+/).length;
+  const tokensIn = apiInputTokens ?? prompt.split(/\s+/).length;
   const tokensOut = response.split(/\s+/).length;
-  const tokensSaved = Number(ecoStats.tokens_saved ?? 0);
-  const originalTokens = tokensIn + tokensSaved;
+  const compressedTok = apiCompressedTokens ?? tokensIn;
+  const wasCompressed = compressedTok < tokensIn;
   return {
     cost_g: Math.round(actualCo2 * 1000) / 1000,
     baseline_g: Math.round(baselineCo2 * 1000) / 1000,
@@ -158,13 +174,13 @@ function mapBackendToCarbonMeta(
     region, cfe_percent: cfeMap[region] || 85,
     tokens_in: tokensIn, tokens_out: tokensOut, latency_ms: 0,
     cached: wasCached, cache_hit_tokens: wasCached ? tokensIn : 0,
-    compressed: tokensSaved > 0, original_tokens: originalTokens,
-    compressed_tokens: tokensIn,
-    compression_ratio: originalTokens > 0 ? tokensIn / originalTokens : 1,
+    compressed: wasCompressed, original_tokens: tokensIn,
+    compressed_tokens: compressedTok,
+    compression_ratio: tokensIn > 0 ? compressedTok / tokensIn : 1,
   };
 }
 
-async function callBackend(prompt: string, chatId: string): Promise<{ response: string; carbonMeta: CarbonMeta } | null> {
+async function callBackend(prompt: string, chatId: string): Promise<BackendResult | null> {
   try {
     const start = performance.now();
     const result = await postOrchestrate({ prompt, user_id: "sorcer-user", project_id: chatId });
@@ -179,9 +195,20 @@ async function callBackend(prompt: string, chatId: string): Promise<{ response: 
     if (result.receipt_id) {
       try { receipt = await getReceipt(result.receipt_id) as unknown as Record<string, unknown>; } catch { /* optional */ }
     }
-    const carbonMeta = mapBackendToCarbonMeta((result.eco_stats ?? {}) as Record<string, unknown>, receipt, prompt, result.response);
+    const carbonMeta = mapBackendToCarbonMeta(
+      (result.eco_stats ?? {}) as Record<string, unknown>, receipt, prompt, result.response,
+      result.was_cached, result.input_tokens, result.compressed_text_tokens,
+    );
     carbonMeta.latency_ms = latency;
-    return { response: result.response, carbonMeta };
+    return {
+      response: result.response,
+      carbonMeta,
+      compressedPrompt: result.compressed_prompt,
+      wasCached: result.was_cached,
+      cacheType: result.cache_type,
+      inputTokens: result.input_tokens,
+      compressedTokens: result.compressed_text_tokens,
+    };
   } catch {
     return null;
   }
@@ -351,7 +378,7 @@ function ServerComparison({ chosenRegion }: { chosenRegion: string }) {
   );
 }
 
-function MessageBubble({ msg, index }: { msg: StoredMessage; index: number }) {
+function MessageBubble({ msg, index, compressionInfo }: { msg: StoredMessage; index: number; compressionInfo?: { original: string; compressed: string; inputTokens: number; compressedTokens: number } }) {
   const isUser = msg.role === "user";
   const [copied, setCopied] = useState(false);
   const modelInfo = MODEL_DISPLAY[msg.carbon.model] || { icon: Bot, color: "text-oak", label: msg.carbon.model.split("/").pop() };
@@ -360,6 +387,9 @@ function MessageBubble({ msg, index }: { msg: StoredMessage; index: number }) {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [msg.content]);
+
+  const showCompression = isUser && compressionInfo && compressionInfo.compressedTokens < compressionInfo.inputTokens;
+  const reductionPctPrompt = showCompression ? Math.round((1 - compressionInfo!.compressedTokens / compressionInfo!.inputTokens) * 100) : 0;
 
   return (
     <motion.div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}
@@ -375,10 +405,59 @@ function MessageBubble({ msg, index }: { msg: StoredMessage; index: number }) {
           animate={!isUser ? { filter: "blur(0px)", opacity: 1 } : undefined}
           transition={!isUser ? { duration: 0.5, delay: Math.min(index * 0.05, 0.3) + 0.15 } : undefined}
         >
-          <div className="whitespace-pre-wrap break-words prose-sm">{msg.content}</div>
+          {showCompression ? (
+            <div className="space-y-1.5">
+              <div className="whitespace-pre-wrap break-words prose-sm line-through text-oak/30 decoration-oak/20">{msg.content}</div>
+              <div className="whitespace-pre-wrap break-words prose-sm text-oak">{compressionInfo!.compressed}</div>
+              <div className="flex items-center gap-1.5 pt-1">
+                <Shrink className="w-3 h-3 text-miami" />
+                <span className="text-[10px] text-miami font-medium">Compressed {compressionInfo!.inputTokens} → {compressionInfo!.compressedTokens} tokens ({reductionPctPrompt}% reduction)</span>
+              </div>
+            </div>
+          ) : (
+            <div className="whitespace-pre-wrap break-words prose-sm">{msg.content}</div>
+          )}
         </motion.div>
         {!isUser && (msg.carbon.cost_g > 0 || msg.carbon.cached || msg.carbon.compressed) && (() => {
-          const reductionPct = msg.carbon.baseline_g > 0 ? Math.round(((msg.carbon.baseline_g - msg.carbon.cost_g) / msg.carbon.baseline_g) * 100) : 0;
+          const isCachedZero = msg.carbon.cached && msg.carbon.cost_g === 0;
+          const reductionPct = isCachedZero ? 100 : (msg.carbon.baseline_g > 0 ? Math.round(((msg.carbon.baseline_g - msg.carbon.cost_g) / msg.carbon.baseline_g) * 100) : 0);
+          
+          if (isCachedZero) {
+            return (
+              <motion.div className="mt-3 rounded-xl border border-topaz/25 bg-gradient-to-br from-topaz/8 to-moss/5 overflow-hidden"
+                initial={{ opacity: 0, y: 12, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ delay: 0.3, type: "spring", stiffness: 120 }}>
+                <div className="px-4 py-4 flex items-center gap-4">
+                  <motion.div className="w-12 h-12 rounded-xl bg-topaz/15 flex items-center justify-center shrink-0 relative"
+                    initial={{ scale: 0, rotate: -20 }} animate={{ scale: 1, rotate: 0 }} transition={{ delay: 0.5, type: "spring", stiffness: 200 }}>
+                    <Zap className="w-6 h-6 text-topaz fill-topaz/30" />
+                    <motion.div className="absolute inset-0 rounded-xl border-2 border-topaz/30"
+                      animate={{ scale: [1, 1.2, 1], opacity: [0.4, 0, 0.4] }} transition={{ duration: 1.5, repeat: Infinity }} />
+                  </motion.div>
+                  <div className="flex-1">
+                    <motion.div className="flex items-baseline gap-2" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
+                      <span className="text-lg font-header text-topaz">Zero Emissions</span>
+                      <span className="text-[10px] text-topaz/60 font-medium">100% cached</span>
+                    </motion.div>
+                    <p className="text-[10px] text-oak/50 mt-0.5">This response was served entirely from the semantic cache — no LLM compute, no energy, no carbon.</p>
+                  </div>
+                  <button onClick={handleCopy} className="p-1.5 rounded-lg text-oak/20 hover:text-oak/50 hover:bg-oak/5 transition-colors" title="Copy response">
+                    {copied ? <Check className="w-3.5 h-3.5 text-moss" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <div className="px-4 pb-3 flex flex-wrap gap-1.5">
+                  <motion.span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-medium text-topaz bg-topaz/10 border border-topaz/20"
+                    initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.8, type: "spring" }}>
+                    <Zap className="w-3 h-3" /> Instant Processing
+                  </motion.span>
+                  <motion.span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-medium text-moss bg-moss/10 border border-moss/15"
+                    initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.9, type: "spring" }}>
+                    <Leaf className="w-3 h-3" /> 0.000g CO₂
+                  </motion.span>
+                </div>
+              </motion.div>
+            );
+          }
+          
           return (
             <motion.div className="mt-3 rounded-xl border border-moss/15 bg-gradient-to-br from-moss/5 to-parchment-dark/30 overflow-hidden"
               initial={{ opacity: 0, y: 12, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ delay: 0.3, type: "spring", stiffness: 120 }}>
@@ -489,6 +568,11 @@ function ChatPageInner() {
 
   const [particleTrigger, setParticleTrigger] = useState(false);
   const [lastSavedAmount, setLastSavedAmount] = useState(0);
+  const [compressedPromptMap, setCompressedPromptMap] = useState<Record<string, { original: string; compressed: string; inputTokens: number; compressedTokens: number }>>({}); 
+
+  // ── Voice mode state ──
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [lastAssistantResponse, setLastAssistantResponse] = useState<string | undefined>();
 
   // ── Refs for cancellation and preventing double-sends ──
   const cancelRef = useRef<{ cancelled: boolean }>({ cancelled: false });
@@ -630,6 +714,15 @@ function ChatPageInner() {
     if (backendResult) {
       fullResponse = backendResult.response;
       carbonMeta = backendResult.carbonMeta;
+      // Store compressed prompt info if compression happened
+      if (backendResult.compressedPrompt && backendResult.inputTokens && backendResult.compressedTokens && backendResult.compressedTokens < backendResult.inputTokens) {
+        setCompressedPromptMap(prev => ({ ...prev, [prompt]: { original: prompt, compressed: backendResult.compressedPrompt!, inputTokens: backendResult.inputTokens!, compressedTokens: backendResult.compressedTokens! } }));
+      }
+      // Use backend's was_cached for accurate cache detection
+      if (backendResult.wasCached) {
+        setCacheHit(true);
+        setLastWasCached(true);
+      }
     } else {
       fullResponse = pickDummyResponse(prompt);
       carbonMeta = makeDummyCarbonMeta();
@@ -674,10 +767,11 @@ function ChatPageInner() {
     updateChat(chatId, { carbonSaved: newSaved, model: carbonMeta.model, region: carbonMeta.region });
     setChat(prev => prev ? { ...prev, carbonSaved: newSaved, model: carbonMeta.model, region: carbonMeta.region } : prev);
 
-    // 9. Done — trigger particles + show breakdown
+    // 9. Done — trigger particles + show breakdown + voice
     setLastCarbonMeta(carbonMeta);
     setStreamingContent("");
     setIsProcessing(false);
+    setLastAssistantResponse(fullResponse);
     if (carbonMeta.saved_g > 0) {
       setLastSavedAmount(carbonMeta.saved_g);
       setParticleTrigger(true);
@@ -718,6 +812,13 @@ function ChatPageInner() {
     const isFirst = chat?.title === "New Conversation";
     runPromptFlow(prompt, isFirst ?? false);
   }, [input, isProcessing, chat, runPromptFlow]);
+
+  // ── Handle voice transcript (from VoiceMode STT) ──
+  const handleVoiceTranscript = useCallback((text: string) => {
+    if (!text.trim() || isProcessing) return;
+    const isFirst = chat?.title === "New Conversation";
+    runPromptFlow(text.trim(), isFirst ?? false);
+  }, [isProcessing, chat, runPromptFlow]);
 
   // ── Computed values ──
   const totalSaved = useMemo(() =>
@@ -776,13 +877,13 @@ function ChatPageInner() {
               <Bot className="w-8 h-8 text-moss/50" />
             </div>
             <h2 className="text-lg font-header text-oak/60 mb-1">Begin your expedition</h2>
-            <p className="text-xs text-oak/30 max-w-xs">Ask the Oracle anything. Your prompts will be routed to the cleanest available intelligence.</p>
+            <p className="text-xs text-oak/30 max-w-xs">Ask Sorcer anything. Your prompts will be routed to the most sustainable energy source available.</p>
           </motion.div>
         )}
 
         {messages.map((msg, i) => (
           <div key={msg.id} ref={i === messages.length - 1 ? lastMessageRef : undefined}>
-            <MessageBubble msg={msg} index={i} />
+            <MessageBubble msg={msg} index={i} compressionInfo={msg.role === "user" ? compressedPromptMap[msg.content] : undefined} />
           </div>
         ))}
 
@@ -841,7 +942,7 @@ function ChatPageInner() {
                     </div>
                   </div>
                 )}
-                {streamingContent.length > 50 && <ServerComparison chosenRegion={optRegion} />}
+                {streamingContent.length > 50 && messages.filter(m => m.role === "assistant").length === 0 && <ServerComparison chosenRegion={optRegion} />}
               </div>
             </motion.div>
           )}
@@ -852,7 +953,19 @@ function ChatPageInner() {
 
       {/* Sticky input */}
       <div className="sticky bottom-0 z-20 pb-4 pt-2 bg-gradient-to-t from-parchment via-parchment to-transparent">
-        <SpellBar input={input} setInput={setInput} onSubmit={handleSubmit} status={status} />
+        <div className="flex items-end gap-2">
+          <div className="flex-1">
+            <SpellBar input={input} setInput={setInput} onSubmit={handleSubmit} status={status} />
+          </div>
+          <div className="pb-1">
+            <VoiceMode
+              onTranscript={handleVoiceTranscript}
+              lastResponse={lastAssistantResponse}
+              voiceEnabled={voiceEnabled}
+              onToggleVoice={() => setVoiceEnabled(v => !v)}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Breakdown popup */}
@@ -870,9 +983,11 @@ function ChatPageInner() {
           const originalPrompt = lastPromptText || "";
           const compRatio = latestA.compression_ratio;
           const wasCompressed = latestA.compressed && compRatio < 1;
-          const compressedPrompt = wasCompressed ? originalPrompt
-            .replace(/\b(please|could you|can you|I would like you to|I want you to|just|really|very|actually|basically|literally|honestly)\b/gi, "")
-            .replace(/\s{2,}/g, " ").trim() || originalPrompt : originalPrompt;
+          // Use actual compressed text from backend if available
+          const backendCompressed = compressedPromptMap[originalPrompt]?.compressed;
+          const compressedPrompt = wasCompressed
+            ? (backendCompressed || originalPrompt)
+            : originalPrompt;
 
           return (
             <>
@@ -895,13 +1010,17 @@ function ChatPageInner() {
                     </button>
                   </div>
 
-                  <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-                    <RouteMapViz model={latestA.model} region={pRegion} cfePercent={pCfe} />
-                  </motion.div>
+                  {!latestA.cached && (
+                    <>
+                      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+                        <RouteMapViz model={latestA.model} region={pRegion} cfePercent={pCfe} />
+                      </motion.div>
 
-                  <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-                    <ServerComparison chosenRegion={pRegion} />
-                  </motion.div>
+                      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                        <ServerComparison chosenRegion={pRegion} />
+                      </motion.div>
+                    </>
+                  )}
 
                   {latestA.cached && (
                     <motion.div className="specimen-card p-3 bg-topaz/5 border-topaz/20"
@@ -967,12 +1086,6 @@ function ChatPageInner() {
                     </div>
                   </motion.div>
 
-                  <motion.div className="text-center pt-1" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}>
-                    <button onClick={() => { setShowBreakdown(false); router.push(`/breakdown/${chatId}`); }}
-                      className="text-[11px] text-moss/60 hover:text-moss transition-colors underline underline-offset-2">
-                      View full breakdown →
-                    </button>
-                  </motion.div>
                 </div>
               </motion.div>
             </>

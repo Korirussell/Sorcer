@@ -12,7 +12,6 @@ import {
   Feather,
   Globe,
   User,
-  Clock,
   Moon,
   Sun,
   Sparkles,
@@ -24,7 +23,7 @@ import {
 import { useRouter, usePathname } from "next/navigation";
 import { useEnergy } from "@/context/EnergyContext";
 import { useTheme } from "next-themes";
-import { getAllChats, clearAllChats, createChat, seedIfEmpty, type ChatRecord } from "@/lib/localChatStore";
+import { getAllChats, clearAllChats, createChat, deleteChat, seedIfEmpty, type ChatRecord } from "@/lib/localChatStore";
 import { ChatBreakdownPopup } from "@/components/ChatBreakdownPopup";
 
 interface SidebarProps {
@@ -35,8 +34,6 @@ interface SidebarProps {
 
 const SHORTCUT_KEYS = ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5"];
 
-// Mock pending task count (would come from shared state in real app)
-const PENDING_TASKS = 2;
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -96,21 +93,19 @@ export function SorcerSidebar({ isOpen, onClose, onCollapse }: SidebarProps) {
 
   const navItems = [
     { id: "history", label: "Field Notes", icon: BookOpen, href: "/", badge: 0 },
+    { id: "projects", label: "Agentic Projects", icon: FlaskConical, href: "/projects", badge: 0 },
     { id: "carbon", label: "Carbon Ledger", icon: BarChart3, href: "/ledger", badge: 0 },
     { id: "map", label: "Realm Map", icon: Globe, href: "/map", badge: 0 },
     { id: "profile", label: "Your Profile", icon: User, href: "/profile", badge: 0 },
-    { id: "scheduler", label: "Task Scroll", icon: Clock, href: "/scheduler", badge: PENDING_TASKS },
-    { id: "projects", label: "Agentic Lab", icon: FlaskConical, href: "/projects", badge: 0 },
   ];
 
   // Determine active nav from current route
   const routeMap: Record<string, string> = {
     "/": "history",
+    "/projects": "projects",
     "/ledger": "carbon",
     "/map": "map",
     "/profile": "profile",
-    "/scheduler": "scheduler",
-    "/projects": "projects",
   };
   const activeNav = routeMap[pathname] || "history";
 
@@ -139,7 +134,7 @@ export function SorcerSidebar({ isOpen, onClose, onCollapse }: SidebarProps) {
             </div>
             <div>
               <h2 className="text-base font-header text-oak leading-tight tracking-wide">Sorcer</h2>
-              <p className="text-[11px] font-sub text-oak-light/60">Carbon Arbitrage Engine</p>
+              <p className="text-[11px] font-sub text-oak-light/60">Carbon Routing Engine</p>
             </div>
           </button>
           <div className="flex items-center gap-1">
@@ -250,6 +245,13 @@ export function SorcerSidebar({ isOpen, onClose, onCollapse }: SidebarProps) {
                     >
                       <FlaskConical className="w-3 h-3" />
                     </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteChat(chat.id); refreshChats(); }}
+                      className="p-1 rounded-md text-oak/20 hover:text-witchberry hover:bg-witchberry/10 transition-colors"
+                      title="Delete Chat"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -297,14 +299,16 @@ export function SorcerSidebar({ isOpen, onClose, onCollapse }: SidebarProps) {
           </button>
         )}
 
+        <button
+          onClick={() => { router.push("/developer"); onClose(); }}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-oak/40 hover:text-oak hover:bg-oak/5 transition-all duration-200 active:scale-95"
+        >
+          <FlaskConical className="w-3.5 h-3.5" />
+          Developer Mode
+        </button>
+
         <div className="flex items-center justify-between text-[10px] text-oak/30 pt-1">
-          <button
-            onClick={() => { router.push("/developer"); onClose(); }}
-            className="font-sub text-xs hover:text-oak/50 transition-colors cursor-default"
-            title=""
-          >
-            Sorcer v1.0
-          </button>
+          <span className="font-sub text-xs">Sorcer v1.0</span>
           <div className="flex items-center gap-1">
             <Leaf className="w-2.5 h-2.5" />
             <span>Protecting Digital Earth</span>

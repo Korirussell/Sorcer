@@ -150,8 +150,8 @@ export default function HomePage() {
   const features = [
     {
       icon: Leaf,
-      title: "Carbon Arbitrage",
-      description: "Routes your prompt to the cleanest available model in real-time",
+      title: "Smart Carbon Routing",
+      description: "Routes every prompt to the cleanest data center using real-time grid signals",
       color: "text-moss",
       bg: "bg-moss/8",
     },
@@ -318,7 +318,7 @@ export default function HomePage() {
             animate={{ opacity: 1 }}
             transition={{ delay: 1.5 }}
           >
-            Powered by the Oracle — real-time carbon intelligence
+            Powered by Sorcer — finding the most sustainable energy sources in real-time
           </motion.p>
       </div>
     </div>

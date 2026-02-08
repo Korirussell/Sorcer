@@ -1,128 +1,107 @@
 "use client";
 
-import { useRef, useMemo } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, Float } from "@react-three/drei";
-import * as THREE from "three";
+import { useMemo, useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Zap, Recycle, Shrink, Leaf, ChevronDown, ChevronUp, Users, Globe, TrendingUp, Infinity } from "lucide-react";
 
-// ─── Dummy Data ──────────────────────────────────────────────────────────────
+// ─── Community Cache Data (shared across ALL users) ─────────────────────────
 
-const DUMMY_PROMPTS = [
-  { prompt: "Explain quantum computing basics", tokens: 42, cached: true, hitTokens: 38, similarity: 0.0 },
-  { prompt: "What is quantum computing?", tokens: 28, cached: true, hitTokens: 28, similarity: 0.85 },
-  { prompt: "How do quantum computers work?", tokens: 34, cached: true, hitTokens: 30, similarity: 0.72 },
-  { prompt: "Write a Python sorting algorithm", tokens: 56, cached: false, hitTokens: 0, similarity: 0.0 },
-  { prompt: "Python quicksort implementation", tokens: 38, cached: true, hitTokens: 35, similarity: 0.68 },
-  { prompt: "Sort a list in Python", tokens: 30, cached: true, hitTokens: 28, similarity: 0.55 },
-  { prompt: "What is machine learning?", tokens: 32, cached: false, hitTokens: 0, similarity: 0.0 },
-  { prompt: "Explain ML algorithms", tokens: 36, cached: true, hitTokens: 32, similarity: 0.62 },
-  { prompt: "Deep learning vs machine learning", tokens: 44, cached: true, hitTokens: 40, similarity: 0.58 },
-  { prompt: "Neural network architecture", tokens: 48, cached: false, hitTokens: 0, similarity: 0.0 },
-  { prompt: "How do neural networks learn?", tokens: 40, cached: true, hitTokens: 36, similarity: 0.65 },
-  { prompt: "Backpropagation explained", tokens: 52, cached: true, hitTokens: 48, similarity: 0.45 },
-  { prompt: "What is React Server Components?", tokens: 38, cached: false, hitTokens: 0, similarity: 0.0 },
-  { prompt: "React RSC vs client components", tokens: 42, cached: true, hitTokens: 38, similarity: 0.7 },
-  { prompt: "Next.js app router guide", tokens: 46, cached: true, hitTokens: 42, similarity: 0.52 },
-  { prompt: "CSS grid layout tutorial", tokens: 34, cached: false, hitTokens: 0, similarity: 0.0 },
-  { prompt: "Flexbox vs CSS grid", tokens: 30, cached: true, hitTokens: 26, similarity: 0.6 },
-  { prompt: "Responsive design patterns", tokens: 36, cached: false, hitTokens: 0, similarity: 0.0 },
-  { prompt: "TypeScript generics explained", tokens: 44, cached: true, hitTokens: 40, similarity: 0.0 },
-  { prompt: "Advanced TypeScript types", tokens: 50, cached: true, hitTokens: 46, similarity: 0.75 },
-  { prompt: "TypeScript utility types guide", tokens: 42, cached: true, hitTokens: 38, similarity: 0.68 },
-  { prompt: "Docker container basics", tokens: 36, cached: false, hitTokens: 0, similarity: 0.0 },
-  { prompt: "Kubernetes vs Docker", tokens: 32, cached: true, hitTokens: 28, similarity: 0.55 },
-  { prompt: "Container orchestration guide", tokens: 48, cached: true, hitTokens: 44, similarity: 0.48 },
-  { prompt: "GraphQL vs REST API", tokens: 40, cached: false, hitTokens: 0, similarity: 0.0 },
-  { prompt: "GraphQL query optimization", tokens: 46, cached: true, hitTokens: 42, similarity: 0.62 },
-  { prompt: "API design best practices", tokens: 38, cached: false, hitTokens: 0, similarity: 0.0 },
-  { prompt: "WebSocket real-time communication", tokens: 44, cached: false, hitTokens: 0, similarity: 0.0 },
-  { prompt: "Server-sent events vs WebSocket", tokens: 42, cached: true, hitTokens: 38, similarity: 0.58 },
-  { prompt: "Redis caching strategies", tokens: 36, cached: true, hitTokens: 32, similarity: 0.0 },
-  { prompt: "Cache invalidation patterns", tokens: 40, cached: true, hitTokens: 36, similarity: 0.65 },
-  { prompt: "Database indexing strategies", tokens: 44, cached: false, hitTokens: 0, similarity: 0.0 },
-  { prompt: "SQL query optimization tips", tokens: 38, cached: true, hitTokens: 34, similarity: 0.52 },
-  { prompt: "PostgreSQL performance tuning", tokens: 46, cached: true, hitTokens: 42, similarity: 0.6 },
-  { prompt: "MongoDB aggregation pipeline", tokens: 50, cached: false, hitTokens: 0, similarity: 0.0 },
-  { prompt: "NoSQL database comparison", tokens: 42, cached: true, hitTokens: 38, similarity: 0.48 },
-  { prompt: "Git branching strategies", tokens: 34, cached: false, hitTokens: 0, similarity: 0.0 },
-  { prompt: "Git rebase vs merge", tokens: 30, cached: true, hitTokens: 26, similarity: 0.72 },
-  { prompt: "CI/CD pipeline setup", tokens: 40, cached: false, hitTokens: 0, similarity: 0.0 },
-  { prompt: "GitHub Actions workflow", tokens: 38, cached: true, hitTokens: 34, similarity: 0.55 },
-];
+const COMMUNITY_CACHE = {
+  totalEntries: 14_892,
+  activeUsers: 2_847,
+  totalQueriesServed: 128_450,
+  cacheHits: 96_338,
+  totalTokensProcessed: 8_456_200,
+  totalTokensSaved: 6_342_150,
+  growthRate: 340, // new entries/day
+  topClusters: [
+    { label: "Code Generation", entries: 3_240, hits: 2_810, color: "bg-blue-500/15 text-blue-700 border-blue-500/20" },
+    { label: "ML / AI Concepts", entries: 2_680, hits: 2_290, color: "bg-orange-500/15 text-orange-700 border-orange-500/20" },
+    { label: "DevOps & Infra", entries: 1_950, hits: 1_640, color: "bg-yellow-600/15 text-yellow-700 border-yellow-600/20" },
+    { label: "Carbon & Sustainability", entries: 1_820, hits: 1_680, color: "bg-moss/15 text-moss border-moss/20" },
+    { label: "Web Development", entries: 1_640, hits: 1_380, color: "bg-cyan-500/15 text-cyan-700 border-cyan-500/20" },
+    { label: "Data & Analytics", entries: 1_120, hits: 940, color: "bg-purple-500/15 text-purple-700 border-purple-500/20" },
+    { label: "System Design", entries: 980, hits: 820, color: "bg-indigo-500/15 text-indigo-700 border-indigo-500/20" },
+    { label: "Security & Auth", entries: 740, hits: 610, color: "bg-pink-500/15 text-pink-700 border-pink-500/20" },
+    { label: "Databases", entries: 722, hits: 580, color: "bg-red-500/15 text-red-700 border-red-500/20" },
+  ],
+  recentSharedHits: [
+    { prompt: "Explain transformer attention mechanism", user: "User #1,847", savedTokens: 420, timeAgo: "12s ago" },
+    { prompt: "Python async/await best practices", user: "User #892", savedTokens: 380, timeAgo: "28s ago" },
+    { prompt: "Carbon footprint of LLM inference", user: "User #2,103", savedTokens: 510, timeAgo: "45s ago" },
+    { prompt: "React Server Components vs SSR", user: "User #441", savedTokens: 340, timeAgo: "1m ago" },
+    { prompt: "Kubernetes horizontal pod autoscaling", user: "User #1,290", savedTokens: 460, timeAgo: "1m ago" },
+    { prompt: "How does RAG reduce hallucination?", user: "User #2,651", savedTokens: 390, timeAgo: "2m ago" },
+    { prompt: "PostgreSQL query optimization tips", user: "User #738", savedTokens: 350, timeAgo: "2m ago" },
+    { prompt: "Docker multi-stage build patterns", user: "User #1,502", savedTokens: 280, timeAgo: "3m ago" },
+    { prompt: "Carbon-aware scheduling strategies", user: "User #2,004", savedTokens: 440, timeAgo: "3m ago" },
+    { prompt: "Fine-tuning vs RAG comparison", user: "User #315", savedTokens: 490, timeAgo: "4m ago" },
+    { prompt: "gRPC streaming vs WebSocket", user: "User #1,178", savedTokens: 320, timeAgo: "5m ago" },
+    { prompt: "Data center water consumption stats", user: "User #2,399", savedTokens: 410, timeAgo: "5m ago" },
+  ],
+};
 
-interface CacheNode3D {
-  id: number;
-  prompt: string;
-  tokens: number;
-  cached: boolean;
-  hitTokens: number;
-  x: number;
-  y: number;
-  z: number;
+function computeStats() {
+  const c = COMMUNITY_CACHE;
+  const hitRate = Math.round((c.cacheHits / c.totalQueriesServed) * 100);
+  const co2PerCall_g = 0.18;
+  const totalCO2Saved_g = c.cacheHits * co2PerCall_g;
+  const totalCO2Saved_kg = totalCO2Saved_g / 1000;
+  const energySaved_kWh = c.totalTokensSaved * 0.0000035;
+  const waterSaved_L = energySaved_kWh * 1.8;
+  const carsEquiv = totalCO2Saved_kg / (4600 / 365); // avg car emits 4600kg/year
+  const treeDays = totalCO2Saved_kg / (21 / 365); // tree absorbs 21kg/year
+  return { hitRate, totalCO2Saved_g, totalCO2Saved_kg, energySaved_kWh, waterSaved_L, carsEquiv, treeDays };
 }
 
-interface CacheEdge3D {
-  from: number;
-  to: number;
-  isHit: boolean;
-  strength: number;
-}
+// ─── Animated Counter ────────────────────────────────────────────────────────
 
-function buildGraph(): { nodes: CacheNode3D[]; edges: CacheEdge3D[]; stats: CacheStats } {
-  const nodes: CacheNode3D[] = DUMMY_PROMPTS.map((p, i) => {
-    const angle = (i / DUMMY_PROMPTS.length) * Math.PI * 2;
-    const layer = Math.floor(i / 8);
-    const r = 2.5 + layer * 1.2 + (Math.random() - 0.5) * 0.8;
-    return {
-      id: i,
-      prompt: p.prompt,
-      tokens: p.tokens,
-      cached: p.cached,
-      hitTokens: p.hitTokens,
-      x: Math.cos(angle + layer * 0.3) * r,
-      y: (Math.random() - 0.5) * 3,
-      z: Math.sin(angle + layer * 0.3) * r,
-    };
-  });
-
-  const edges: CacheEdge3D[] = [];
-  // Connect similar prompts in clusters
-  const clusters = [
-    [0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11],
-    [12, 13, 14], [15, 16, 17], [18, 19, 20], [21, 22, 23],
-    [24, 25, 26], [27, 28], [29, 30], [31, 32, 33],
-    [34, 35], [36, 37], [38, 39],
-  ];
-  for (const cluster of clusters) {
-    for (let i = 0; i < cluster.length; i++) {
-      for (let j = i + 1; j < cluster.length; j++) {
-        const a = DUMMY_PROMPTS[cluster[i]];
-        const b = DUMMY_PROMPTS[cluster[j]];
-        const isHit = a.cached || b.cached;
-        edges.push({ from: cluster[i], to: cluster[j], isHit, strength: 0.5 + Math.random() * 0.5 });
-      }
+function AnimCounter({ value, decimals = 0, duration = 1.5, prefix = "", suffix = "" }: {
+  value: number; decimals?: number; duration?: number; prefix?: string; suffix?: string;
+}) {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    const start = performance.now();
+    function tick(now: number) {
+      const p = Math.min((now - start) / (duration * 1000), 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setDisplay(value * eased);
+      if (p < 1) requestAnimationFrame(tick);
     }
-  }
-  // Cross-cluster connections
-  edges.push({ from: 6, to: 9, isHit: true, strength: 0.4 });
-  edges.push({ from: 12, to: 18, isHit: false, strength: 0.3 });
-  edges.push({ from: 29, to: 32, isHit: true, strength: 0.5 });
-  edges.push({ from: 3, to: 31, isHit: false, strength: 0.25 });
-
-  const totalTokens = DUMMY_PROMPTS.reduce((s, p) => s + p.tokens, 0);
-  const hitTokens = DUMMY_PROMPTS.reduce((s, p) => s + p.hitTokens, 0);
-  const cachedCount = DUMMY_PROMPTS.filter(p => p.cached).length;
-  const hitRate = Math.round((cachedCount / DUMMY_PROMPTS.length) * 100);
-  const energySaved_kWh = hitTokens * 0.0000035;
-  const carbonSaved_g = energySaved_kWh * 400;
-  const waterSaved_mL = energySaved_kWh * 1.8;
-
-  return {
-    nodes,
-    edges,
-    stats: { totalTokens, hitTokens, cachedCount, total: DUMMY_PROMPTS.length, hitRate, energySaved_kWh, carbonSaved_g, waterSaved_mL },
-  };
+    requestAnimationFrame(tick);
+  }, [value, duration]);
+  return <>{prefix}{decimals > 0 ? display.toFixed(decimals) : Math.round(display).toLocaleString()}{suffix}</>;
 }
+
+// ─── Live Feed Item ──────────────────────────────────────────────────────────
+
+function LiveHitItem({ prompt, user, savedTokens, timeAgo, index }: {
+  prompt: string; user: string; savedTokens: number; timeAgo: string; index: number;
+}) {
+  return (
+    <motion.div
+      className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-parchment/60 border border-oak/6 hover:border-moss/20 transition-colors"
+      initial={{ opacity: 0, x: -16 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.06, duration: 0.3 }}
+    >
+      <div className="w-2 h-2 rounded-full bg-moss animate-pulse shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] text-oak truncate">{prompt}</p>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="text-[9px] text-oak/30">{user}</span>
+          <span className="text-[9px] text-oak/20">{timeAgo}</span>
+        </div>
+      </div>
+      <div className="text-right shrink-0">
+        <span className="text-[10px] text-moss font-medium tabular-nums">−{savedTokens}</span>
+        <span className="text-[9px] text-oak/25 block">tokens</span>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Exports ─────────────────────────────────────────────────────────────────
 
 export interface CacheStats {
   totalTokens: number;
@@ -135,172 +114,215 @@ export interface CacheStats {
   waterSaved_mL: number;
 }
 
-// ─── 3D Node ─────────────────────────────────────────────────────────────────
-
-function CacheNodeMesh({ node }: { node: CacheNode3D }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const size = 0.06 + (node.tokens / 500);
-  const isHit = node.cached && node.hitTokens > 0;
-
-  const color = isHit ? "#44ff88" : node.cached ? "#4488ff" : "#ff4466";
-  const emissive = isHit ? "#22cc66" : node.cached ? "#2266cc" : "#cc2244";
-  const intensity = isHit ? 2.0 : node.cached ? 1.2 : 0.6;
-
-  useFrame(({ clock }) => {
-    if (meshRef.current) {
-      const t = clock.getElapsedTime();
-      const pulse = 1 + Math.sin(t * 2 + node.id) * 0.15;
-      meshRef.current.scale.setScalar(pulse);
-    }
-  });
-
-  return (
-    <mesh ref={meshRef} position={[node.x, node.y, node.z]}>
-      <sphereGeometry args={[size, 8, 8]} />
-      <meshStandardMaterial
-        color={color}
-        emissive={emissive}
-        emissiveIntensity={intensity}
-        transparent
-        opacity={0.9}
-        roughness={0.2}
-      />
-    </mesh>
-  );
-}
-
-// ─── 3D Edge ─────────────────────────────────────────────────────────────────
-
-function CacheEdgeLine({ edge, nodes }: { edge: CacheEdge3D; nodes: CacheNode3D[] }) {
-  const a = nodes[edge.from];
-  const b = nodes[edge.to];
-
-  const geometry = useMemo(() => {
-    const geo = new THREE.BufferGeometry();
-    const positions = new Float32Array([a.x, a.y, a.z, b.x, b.y, b.z]);
-    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    return geo;
-  }, [a, b]);
-
-  const material = useMemo(() => {
-    return new THREE.LineBasicMaterial({
-      color: edge.isHit ? "#44ff88" : "#4488ff",
-      transparent: true,
-      opacity: edge.isHit ? 0.3 : 0.08,
-    });
-  }, [edge.isHit]);
-
-  return <primitive object={new THREE.Line(geometry, material)} />;
-}
-
-// ─── Fairy Dust Particles ────────────────────────────────────────────────────
-
-function FairyDust() {
-  const pointsRef = useRef<THREE.Points>(null);
-  const count = 200;
-
-  const [positions, velocities] = useMemo(() => {
-    const pos = new Float32Array(count * 3);
-    const vel = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const r = 1 + Math.random() * 5;
-      pos[i * 3] = Math.cos(angle) * r;
-      pos[i * 3 + 1] = (Math.random() - 0.5) * 5;
-      pos[i * 3 + 2] = Math.sin(angle) * r;
-      vel[i * 3] = (Math.random() - 0.5) * 0.002;
-      vel[i * 3 + 1] = 0.003 + Math.random() * 0.005;
-      vel[i * 3 + 2] = (Math.random() - 0.5) * 0.002;
-    }
-    return [pos, vel];
-  }, []);
-
-  useFrame(() => {
-    if (!pointsRef.current) return;
-    const posAttr = pointsRef.current.geometry.attributes.position as THREE.BufferAttribute;
-    const arr = posAttr.array as Float32Array;
-    for (let i = 0; i < count; i++) {
-      arr[i * 3] += velocities[i * 3];
-      arr[i * 3 + 1] += velocities[i * 3 + 1];
-      arr[i * 3 + 2] += velocities[i * 3 + 2];
-      if (arr[i * 3 + 1] > 3.5) {
-        const a = Math.random() * Math.PI * 2;
-        const r = 1 + Math.random() * 5;
-        arr[i * 3] = Math.cos(a) * r;
-        arr[i * 3 + 1] = -2.5;
-        arr[i * 3 + 2] = Math.sin(a) * r;
-      }
-    }
-    posAttr.needsUpdate = true;
-  });
-
-  return (
-    <points ref={pointsRef}>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} count={count} />
-      </bufferGeometry>
-      <pointsMaterial color="#88bbff" size={0.03} transparent opacity={0.6} sizeAttenuation />
-    </points>
-  );
-}
-
-// ─── Scene ───────────────────────────────────────────────────────────────────
-
-function CacheScene({ nodes, edges }: { nodes: CacheNode3D[]; edges: CacheEdge3D[] }) {
-  return (
-    <>
-      <ambientLight intensity={0.15} />
-      <pointLight position={[0, 4, 0]} color="#4488ff" intensity={1.0} distance={12} />
-      <pointLight position={[5, 2, 3]} color="#44ff88" intensity={0.5} distance={10} />
-      <pointLight position={[-4, -1, -3]} color="#ff4466" intensity={0.3} distance={8} />
-
-      <Float speed={0.5} rotationIntensity={0.05} floatIntensity={0.1}>
-        <group>
-          {edges.map((e, i) => (
-            <CacheEdgeLine key={i} edge={e} nodes={nodes} />
-          ))}
-          {nodes.map((n) => (
-            <CacheNodeMesh key={n.id} node={n} />
-          ))}
-        </group>
-      </Float>
-
-      <FairyDust />
-
-      <OrbitControls
-        enableZoom
-        autoRotate
-        autoRotateSpeed={0.4}
-        maxDistance={12}
-        minDistance={3}
-      />
-      <fog attach="fog" args={["#080c18", 8, 20]} />
-    </>
-  );
-}
-
-// ─── Exports ─────────────────────────────────────────────────────────────────
-
 export function useSemanticCacheData() {
-  return useMemo(() => buildGraph(), []);
+  return useMemo(() => {
+    const s = computeStats();
+    const stats: CacheStats = {
+      totalTokens: COMMUNITY_CACHE.totalTokensProcessed,
+      hitTokens: COMMUNITY_CACHE.totalTokensSaved,
+      cachedCount: COMMUNITY_CACHE.cacheHits,
+      total: COMMUNITY_CACHE.totalEntries,
+      hitRate: s.hitRate,
+      energySaved_kWh: s.energySaved_kWh,
+      carbonSaved_g: s.totalCO2Saved_g,
+      waterSaved_mL: s.waterSaved_L,
+    };
+    return { nodes: [], edges: [], stats };
+  }, []);
 }
 
-export function SemanticCacheGraph3D({ nodes, edges }: { nodes: CacheNode3D[]; edges: CacheEdge3D[] }) {
+export function SemanticCacheGraph3D() {
+  const stats = useMemo(() => computeStats(), []);
+  const c = COMMUNITY_CACHE;
+  const [expanded, setExpanded] = useState(false);
+
+  const visibleHits = expanded ? c.recentSharedHits : c.recentSharedHits.slice(0, 6);
+
   return (
-    <div
-      className="w-full rounded-2xl overflow-hidden border border-[rgba(68,136,255,0.15)]"
-      style={{
-        height: 480,
-        background: "linear-gradient(180deg, #080c18, #0a1020)",
-      }}
-    >
-      <Canvas
-        camera={{ position: [0, 3, 8], fov: 50 }}
-        gl={{ antialias: true, alpha: true }}
-        dpr={[1, 1.5]}
-      >
-        <CacheScene nodes={nodes} edges={edges} />
-      </Canvas>
+    <div className="w-full rounded-2xl overflow-hidden border border-oak/10 bg-gradient-to-br from-parchment to-parchment-dark/50">
+      <div className="p-6 pb-4">
+
+        {/* ── Hero: The Shared Pool Concept ── */}
+        <motion.div
+          className="mb-6 rounded-2xl p-6 bg-gradient-to-br from-moss/10 via-moss/5 to-transparent border border-moss/20"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-2xl bg-moss/20 flex items-center justify-center">
+              <Globe className="w-6 h-6 text-moss" />
+            </div>
+            <div>
+              <h3 className="text-lg font-header text-oak">The Shared Semantic Cache</h3>
+              <p className="text-[11px] text-oak/40">A community knowledge pool that grows with every user</p>
+            </div>
+            <div className="ml-auto flex items-center gap-1.5">
+              <Infinity className="w-4 h-4 text-moss/50" />
+              <span className="text-[10px] text-moss/50">∞ capacity</span>
+            </div>
+          </div>
+
+          <p className="text-xs text-oak/60 leading-relaxed mb-4">
+            Unlike traditional per-user caches, Sorcer maintains a <span className="text-moss font-medium">single shared pool</span> across
+            all users. When <em>anyone</em> asks a similar question, the cached response is served instantly —
+            <span className="text-moss font-medium"> zero LLM compute, zero carbon</span>. The more people use Sorcer,
+            the smarter and more efficient it gets for <em>everyone</em>.
+          </p>
+
+        </motion.div>
+
+        {/* ── Projected Community Impact Stats ── */}
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[10px] text-oak/30 uppercase tracking-wider">Projected / Estimated at Scale</span>
+          <div className="flex-1 h-px bg-oak/8" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          <motion.div className="specimen-card p-4 text-center" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+            <div className="text-3xl font-header text-moss tabular-nums mb-1">
+              <AnimCounter value={stats.hitRate} suffix="%" />
+            </div>
+            <div className="text-[10px] text-oak/40">Projected Hit Rate</div>
+            <div className="text-[9px] text-moss/60 mt-1">
+              est. <AnimCounter value={c.cacheHits} /> queries served free
+            </div>
+          </motion.div>
+
+          <motion.div className="specimen-card p-4 text-center" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+            <div className="text-3xl font-header text-topaz tabular-nums mb-1">
+              <AnimCounter value={stats.totalCO2Saved_kg} decimals={1} suffix="kg" />
+            </div>
+            <div className="text-[10px] text-oak/40">Estimated CO₂ Saved</div>
+            <div className="text-[9px] text-topaz/60 mt-1">≈ {stats.treeDays.toFixed(0)} tree-days absorbed</div>
+          </motion.div>
+
+          <motion.div className="specimen-card p-4 text-center" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+            <div className="text-3xl font-header text-miami tabular-nums mb-1">
+              <AnimCounter value={c.totalTokensSaved} />
+            </div>
+            <div className="text-[10px] text-oak/40">Estimated Tokens Recycled</div>
+            <div className="text-[9px] text-miami/60 mt-1">projected across all users</div>
+          </motion.div>
+
+          <motion.div className="specimen-card p-4 text-center" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+            <div className="text-3xl font-header text-oak tabular-nums mb-1">
+              <AnimCounter value={c.totalQueriesServed} />
+            </div>
+            <div className="text-[10px] text-oak/40">Projected Queries</div>
+            <div className="text-[9px] text-oak/30 mt-1">est. {(c.totalQueriesServed - c.cacheHits).toLocaleString()} requiring LLM</div>
+          </motion.div>
+        </div>
+
+        {/* ── Knowledge Clusters ── */}
+        <motion.div
+          className="mb-6 specimen-card p-5"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.28 }}
+        >
+          <h4 className="text-sm font-medium text-oak mb-3">Knowledge Clusters</h4>
+          <p className="text-[11px] text-oak/40 mb-4">
+            The cache organizes itself into semantic clusters. Similar prompts cluster together,
+            so even <em>slightly different</em> phrasings get cache hits.
+          </p>
+          <div className="space-y-2.5">
+            {c.topClusters.map((cluster, i) => {
+              const hitPct = Math.round((cluster.hits / cluster.entries) * 100);
+              return (
+                <motion.div
+                  key={cluster.label}
+                  className="flex items-center gap-3"
+                  initial={{ opacity: 0, x: -12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.3 + i * 0.04 }}
+                >
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-medium border w-36 shrink-0 ${cluster.color}`}>
+                    {cluster.label}
+                  </span>
+                  <div className="flex-1 h-4 rounded-full bg-oak/5 overflow-hidden relative">
+                    <motion.div
+                      className="absolute inset-y-0 left-0 rounded-full"
+                      style={{ background: "linear-gradient(90deg, #4B6A4C, #6B9E6F)" }}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${hitPct}%` }}
+                      transition={{ delay: 0.5 + i * 0.05, duration: 0.8, ease: "easeOut" }}
+                    />
+                  </div>
+                  <div className="w-24 text-right shrink-0">
+                    <span className="text-[10px] text-moss font-medium tabular-nums">{hitPct}%</span>
+                    <span className="text-[9px] text-oak/25 ml-1">({cluster.entries.toLocaleString()})</span>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </motion.div>
+
+        {/* ── How It Works ── */}
+        <motion.div
+          className="mb-6 rounded-xl bg-topaz/6 border border-topaz/15 p-5"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+        >
+          <h4 className="text-sm font-medium text-oak mb-3">How the Shared Cache Works</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="text-center p-3">
+              <div className="text-2xl mb-2">🧠</div>
+              <div className="text-[11px] text-oak font-medium mb-1">Semantic Matching</div>
+              <div className="text-[10px] text-oak/40 leading-relaxed">
+                Your prompt is embedded into a vector. We search for semantically similar prompts — not exact matches.
+              </div>
+            </div>
+            <div className="text-center p-3">
+              <div className="text-2xl mb-2">🌐</div>
+              <div className="text-[11px] text-oak font-medium mb-1">Shared Across Everyone</div>
+              <div className="text-[10px] text-oak/40 leading-relaxed">
+                Every user&apos;s query enriches the pool. When User #2,000 asks what User #47 asked, the answer is instant.
+              </div>
+            </div>
+            <div className="text-center p-3">
+              <div className="text-2xl mb-2">♾️</div>
+              <div className="text-[11px] text-oak font-medium mb-1">Infinitely Scalable</div>
+              <div className="text-[10px] text-oak/40 leading-relaxed">
+                No cap. The pool grows forever. More users = higher hit rate = more carbon saved for everyone.
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* ── Global Savings Summary ── */}
+        <motion.div
+          className="rounded-xl bg-moss/8 border border-moss/15 p-4 mb-6"
+          initial={{ opacity: 0, scale: 0.97 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.45 }}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-oak/50">Community token flow</span>
+            <span className="text-xs text-oak/60 tabular-nums font-medium">{c.totalTokensProcessed.toLocaleString()} total</span>
+          </div>
+          <div className="h-5 rounded-full bg-oak/8 overflow-hidden relative">
+            <motion.div
+              className="absolute inset-y-0 left-0 rounded-full"
+              style={{ background: "linear-gradient(90deg, #4B6A4C, #6B9E6F)" }}
+              initial={{ width: 0 }}
+              animate={{ width: `${(c.totalTokensSaved / c.totalTokensProcessed) * 100}%` }}
+              transition={{ delay: 0.6, duration: 1.2, ease: "easeOut" }}
+            />
+          </div>
+          <div className="flex items-center justify-between mt-2">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-moss" />
+              <span className="text-[10px] text-moss font-medium">{c.totalTokensSaved.toLocaleString()} tokens served from cache ({Math.round((c.totalTokensSaved / c.totalTokensProcessed) * 100)}%)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-oak/15" />
+              <span className="text-[10px] text-oak/40">{(c.totalTokensProcessed - c.totalTokensSaved).toLocaleString()} computed</span>
+            </div>
+          </div>
+        </motion.div>
+
+      </div>
     </div>
   );
 }

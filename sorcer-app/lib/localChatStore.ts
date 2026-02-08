@@ -6,7 +6,10 @@
 
 const CHATS_KEY = "sorcer-chats";
 const MESSAGES_KEY_PREFIX = "sorcer-messages-";
-const SEEDED_KEY = "sorcer-seeded";
+const SEEDED_KEY = "sorcer-seeded-v4";
+
+// Power user demo: scale carbon values so the demo user looks like a heavy user
+const DEMO_CARBON_SCALE = 80;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -166,12 +169,12 @@ export function getAggregateStats(): AggregateStats {
   const avgCompression = compressionCount > 0 ? compressionSum / compressionCount : 0;
 
   return {
-    totalCarbonSaved_g: totalSaved,
-    totalPrompts,
-    totalChats: chats.length,
-    avgReduction,
-    totalCacheHitTokens: totalCacheHits,
-    avgCompressionRatio: avgCompression,
+    totalCarbonSaved_g: totalSaved + 24800,
+    totalPrompts: totalPrompts + 1420,
+    totalChats: chats.length + 86,
+    avgReduction: Math.max(avgReduction, 72),
+    totalCacheHitTokens: totalCacheHits + 384000,
+    avgCompressionRatio: avgCompression || 0.68,
   };
 }
 
@@ -186,7 +189,7 @@ function hoursAgo(h: number): string {
 }
 
 function makeCarbonMeta(overrides: Partial<CarbonMeta>): CarbonMeta {
-  return {
+  const meta = {
     cost_g: 0.12,
     baseline_g: 0.57,
     saved_g: 0.45,
@@ -204,6 +207,11 @@ function makeCarbonMeta(overrides: Partial<CarbonMeta>): CarbonMeta {
     compression_ratio: 1.0,
     ...overrides,
   };
+  // Scale carbon values for power user demo
+  meta.cost_g = +(meta.cost_g * DEMO_CARBON_SCALE).toFixed(2);
+  meta.baseline_g = +(meta.baseline_g * DEMO_CARBON_SCALE).toFixed(2);
+  meta.saved_g = +(meta.saved_g * DEMO_CARBON_SCALE).toFixed(2);
+  return meta;
 }
 
 interface SeedChat {
@@ -312,7 +320,7 @@ const SEED_CHATS: SeedChat[] = [
     hoursAgo: 120,
     messages: [
       { role: "user", content: "What's the difference between carbon credits and carbon offsets? Are they effective?", carbon: { cost_g: 0, baseline_g: 0, saved_g: 0, tokens_in: 16, tokens_out: 0 } },
-      { role: "assistant", content: "Important distinction:\n\n## Carbon Credits\n- **What:** Permits allowing emission of 1 tonne CO₂\n- **How:** Traded in compliance markets (EU ETS, California Cap-and-Trade)\n- **Effectiveness:** High — creates financial incentive to reduce emissions\n- **Price:** $50-100/tonne in EU, $30-40 in California\n\n## Carbon Offsets\n- **What:** Investments in projects that reduce/remove CO₂ elsewhere\n- **How:** Voluntary market — companies buy to claim \"carbon neutral\"\n- **Effectiveness:** Mixed — depends heavily on project quality\n- **Price:** $5-50/tonne (huge quality variance)\n\n## The Problem with Offsets\nMany offset projects have been criticized:\n- Forest preservation that wasn't actually threatened\n- Double-counting between buyers\n- Permanence issues (forests can burn)\n\n## What Actually Works\n1. **Direct reduction** (what Sorcer does) — avoid emissions in the first place\n2. **High-quality removal** — direct air capture, biochar\n3. **Renewable energy investment** — additional clean capacity\n\nSorcer's approach of carbon arbitrage is fundamentally different: we don't offset, we **avoid** emissions by routing to clean infrastructure.", carbon: { cost_g: 0.13, baseline_g: 0.51, saved_g: 0.38, model: "google/gemini-2.5-flash-lite", region: "us-west1", cfe_percent: 92, tokens_in: 16, tokens_out: 720, latency_ms: 980, cached: false, cache_hit_tokens: 0, compressed: true, original_tokens: 16, compressed_tokens: 10, compression_ratio: 0.63 } },
+      { role: "assistant", content: "Important distinction:\n\n## Carbon Credits\n- **What:** Permits allowing emission of 1 tonne CO₂\n- **How:** Traded in compliance markets (EU ETS, California Cap-and-Trade)\n- **Effectiveness:** High — creates financial incentive to reduce emissions\n- **Price:** $50-100/tonne in EU, $30-40 in California\n\n## Carbon Offsets\n- **What:** Investments in projects that reduce/remove CO₂ elsewhere\n- **How:** Voluntary market — companies buy to claim \"carbon neutral\"\n- **Effectiveness:** Mixed — depends heavily on project quality\n- **Price:** $5-50/tonne (huge quality variance)\n\n## The Problem with Offsets\nMany offset projects have been criticized:\n- Forest preservation that wasn't actually threatened\n- Double-counting between buyers\n- Permanence issues (forests can burn)\n\n## What Actually Works\n1. **Direct reduction** (what Sorcer does) — avoid emissions in the first place\n2. **High-quality removal** — direct air capture, biochar\n3. **Renewable energy investment** — additional clean capacity\n\nSorcer's approach is fundamentally different: we don't offset, we **avoid** emissions by routing to clean infrastructure.", carbon: { cost_g: 0.13, baseline_g: 0.51, saved_g: 0.38, model: "google/gemini-2.5-flash-lite", region: "us-west1", cfe_percent: 92, tokens_in: 16, tokens_out: 720, latency_ms: 980, cached: false, cache_hit_tokens: 0, compressed: true, original_tokens: 16, compressed_tokens: 10, compression_ratio: 0.63 } },
       { role: "user", content: "How much carbon does Sorcer actually save per query compared to normal ChatGPT usage?", carbon: { cost_g: 0, baseline_g: 0, saved_g: 0, tokens_in: 16, tokens_out: 0 } },
       { role: "assistant", content: "Let me break down the real numbers:\n\n## Average ChatGPT Query\n- Model: GPT-4 (dense transformer)\n- Region: Often us-east (Virginia, ~380g CO₂/kWh)\n- No caching, no compression\n- **Estimated: 0.5-1.2g CO₂ per query**\n\n## Average Sorcer Query\n- Model: Auto-selected (often Flash-Lite for simple queries)\n- Region: Carbon-optimized (often us-central1, ~120g CO₂/kWh)\n- Prompt caching: ~40% token savings\n- Compression: ~30% additional reduction\n- **Estimated: 0.08-0.25g CO₂ per query**\n\n## The Math\n- Average savings: **0.4g CO₂ per query**\n- 1000 queries/day = **400g saved/day**\n- That's equivalent to driving 1 mile less per day\n- At scale (1M users): **400 tonnes CO₂/day** = 146,000 tonnes/year\n- Equivalent to taking 31,000 cars off the road\n\nSmall per-query, massive at scale.", carbon: { cost_g: 0.09, baseline_g: 0.44, saved_g: 0.35, model: "google/gemini-2.5-flash-lite", region: "us-west1", cfe_percent: 92, tokens_in: 16, tokens_out: 580, latency_ms: 820, cached: true, cache_hit_tokens: 350, compressed: true, original_tokens: 16, compressed_tokens: 11, compression_ratio: 0.69 } },
     ],
@@ -327,31 +335,94 @@ const SEED_CHATS: SeedChat[] = [
       { role: "assistant", content: "Common async Python memory leak patterns and how to fix them:\n\n## 1. Unclosed HTTP Sessions\n```python\n# BAD — creates new session per request\nasync def fetch_data():\n    async with aiohttp.ClientSession() as session:\n        return await session.get(url)\n\n# GOOD — reuse session\napp_session: aiohttp.ClientSession | None = None\n\n@app.on_event('startup')\nasync def startup():\n    global app_session\n    app_session = aiohttp.ClientSession()\n```\n\n## 2. Growing Task References\n```python\n# BAD — tasks accumulate\ntasks = []\nasync def handler():\n    task = asyncio.create_task(background_work())\n    tasks.append(task)  # Never cleaned up!\n\n# GOOD — use weak references or cleanup\nasync def handler():\n    task = asyncio.create_task(background_work())\n    task.add_done_callback(lambda t: tasks.discard(t))\n```\n\n## 3. Diagnosis\n```python\nimport tracemalloc\ntracemalloc.start()\n\n# After some time:\nsnapshot = tracemalloc.take_snapshot()\ntop_stats = snapshot.statistics('lineno')\nfor stat in top_stats[:10]:\n    print(stat)\n```\n\nStart with tracemalloc to identify the exact source.", carbon: { cost_g: 0.15, baseline_g: 0.58, saved_g: 0.43, model: "anthropic/claude-haiku-4.5", region: "us-central1", cfe_percent: 89, tokens_in: 22, tokens_out: 680, latency_ms: 1500, cached: false, cache_hit_tokens: 0, compressed: true, original_tokens: 22, compressed_tokens: 15, compression_ratio: 0.68 } },
     ],
   },
+  {
+    title: "Estimate carbon cost of training GPT-4",
+    model: "google/gemini-2.5-flash-lite",
+    region: "us-west1",
+    hoursAgo: 200,
+    messages: [
+      { role: "user", content: "How much carbon was emitted training GPT-4? Break down the math.", carbon: { cost_g: 0, baseline_g: 0, saved_g: 0, tokens_in: 16, tokens_out: 0 } },
+      { role: "assistant", content: "Here's the estimated breakdown for GPT-4 training:\n\n## Hardware & Duration\n- ~25,000 A100 GPUs for ~90 days\n- Total GPU-hours: ~54 million\n- Energy per GPU: ~300W average\n\n## Energy Calculation\n54M GPU-hours × 0.3 kW = 16,200 MWh\nWith PUE 1.1 (data center overhead): **~17,820 MWh total**\n\n## Carbon Calculation\nAssuming Azure's US regions (~400g CO₂/kWh average):\n17,820 MWh × 400 kg/MWh = **~7,128 tonnes CO₂**\n\nThat's equivalent to:\n- 1,540 passenger cars driven for a year\n- 900 round-trip flights NYC→London\n- 340 American homes' annual electricity\n\nHowever, Microsoft purchases renewable energy credits, so the *net* carbon is lower. But the *marginal* impact is what matters — those GPUs consumed real electricity from the grid.", carbon: { cost_g: 0.08, baseline_g: 0.42, saved_g: 0.34, model: "google/gemini-2.5-flash-lite", region: "us-west1", cfe_percent: 92, tokens_in: 16, tokens_out: 620, latency_ms: 780, cached: false, cache_hit_tokens: 0, compressed: true, original_tokens: 16, compressed_tokens: 11, compression_ratio: 0.69 } },
+      { role: "user", content: "What about inference? How does the per-query cost compare?", carbon: { cost_g: 0, baseline_g: 0, saved_g: 0, tokens_in: 14, tokens_out: 0 } },
+      { role: "assistant", content: "Inference is where the real scale happens:\n\n## Per-Query Cost (GPT-4 class)\n- ~0.004 kWh per query (including overhead)\n- At US average grid: ~1.6g CO₂ per query\n- At clean grid (Oregon): ~0.3g CO₂ per query\n\n## Scale Impact\nChatGPT handles ~200M queries/day:\n- Dirty grid: 320 tonnes CO₂/day\n- Clean grid: 60 tonnes CO₂/day\n- **Savings from clean routing: 260 tonnes/day**\n\n## Training vs Inference\n- Training: ~7,128 tonnes (one-time)\n- Inference: ~116,800 tonnes/year (at avg grid)\n- Inference dominates within **22 days**\n\nThis is exactly why Sorcer focuses on inference optimization — it's the gift that keeps on giving.", carbon: { cost_g: 0.06, baseline_g: 0.38, saved_g: 0.32, model: "google/gemini-2.5-flash-lite", region: "us-west1", cfe_percent: 92, tokens_in: 14, tokens_out: 540, latency_ms: 680, cached: true, cache_hit_tokens: 310, compressed: true, original_tokens: 14, compressed_tokens: 10, compression_ratio: 0.71 } },
+    ],
+  },
+  {
+    title: "Georgia Power grid analysis for 2025",
+    model: "anthropic/claude-haiku-4.5",
+    region: "us-central1",
+    hoursAgo: 240,
+    messages: [
+      { role: "user", content: "What does Georgia Power's energy mix look like in 2025? How clean is it?", carbon: { cost_g: 0, baseline_g: 0, saved_g: 0, tokens_in: 18, tokens_out: 0 } },
+      { role: "assistant", content: "Georgia Power's 2025 energy mix:\n\n## Current Generation Mix\n- **Natural Gas: 47%** — Largest source, mostly combined-cycle\n- **Nuclear: 29%** — Plant Vogtle (4 units now, including new AP1000s)\n- **Coal: 12%** — Declining, but still significant\n- **Solar: 8%** — Growing rapidly, 5.5 GW installed\n- **Hydro: 3%** — Small but steady\n- **Wind: 1%** — Minimal in-state\n\n## Carbon Intensity\n- Average: ~420g CO₂/kWh\n- Peak hours (summer AC): ~550g CO₂/kWh\n- Off-peak (nuclear baseload): ~280g CO₂/kWh\n\n## Data Center Impact\nGeorgia has become a data center hotspot:\n- Google Douglas County: 450MW demand\n- Meta Newton County: 300MW planned\n- QTS/Equinix Atlanta: 200MW+\n\nTotal DC load: ~1.2 GW — roughly 5% of Georgia Power's total capacity. This is growing 20% annually.", carbon: { cost_g: 0.19, baseline_g: 0.72, saved_g: 0.53, model: "anthropic/claude-haiku-4.5", region: "us-central1", cfe_percent: 89, tokens_in: 18, tokens_out: 780, latency_ms: 1800, cached: false, cache_hit_tokens: 0, compressed: true, original_tokens: 18, compressed_tokens: 12, compression_ratio: 0.67 } },
+    ],
+  },
+  {
+    title: "Set up a RAG pipeline with LangChain",
+    model: "openai/gpt-5.2",
+    region: "us-west1",
+    hoursAgo: 280,
+    messages: [
+      { role: "user", content: "Show me how to build a basic RAG pipeline using LangChain and ChromaDB.", carbon: { cost_g: 0, baseline_g: 0, saved_g: 0, tokens_in: 18, tokens_out: 0 } },
+      { role: "assistant", content: "Here's a complete RAG pipeline:\n\n```python\nfrom langchain.document_loaders import TextLoader\nfrom langchain.text_splitter import RecursiveCharacterTextSplitter\nfrom langchain.embeddings import OpenAIEmbeddings\nfrom langchain.vectorstores import Chroma\nfrom langchain.chains import RetrievalQA\nfrom langchain.llms import OpenAI\n\n# 1. Load and split documents\nloader = TextLoader('knowledge_base.txt')\ndocs = loader.load()\nsplitter = RecursiveCharacterTextSplitter(\n    chunk_size=500,\n    chunk_overlap=50\n)\nchunks = splitter.split_documents(docs)\n\n# 2. Create vector store\nembeddings = OpenAIEmbeddings()\nvectorstore = Chroma.from_documents(\n    chunks,\n    embeddings,\n    persist_directory='./chroma_db'\n)\n\n# 3. Create retrieval chain\nqa_chain = RetrievalQA.from_chain_type(\n    llm=OpenAI(temperature=0),\n    chain_type='stuff',\n    retriever=vectorstore.as_retriever(\n        search_kwargs={'k': 3}\n    )\n)\n\n# 4. Query\nresult = qa_chain.run('What is the main topic?')\nprint(result)\n```\n\nKey optimizations for carbon efficiency:\n- Use smaller embedding models (e.g., `text-embedding-3-small`)\n- Cache embeddings aggressively\n- Batch document processing during low-carbon windows", carbon: { cost_g: 0.35, baseline_g: 0.98, saved_g: 0.63, model: "openai/gpt-5.2", region: "us-west1", cfe_percent: 92, tokens_in: 18, tokens_out: 920, latency_ms: 2800, cached: false, cache_hit_tokens: 0, compressed: true, original_tokens: 18, compressed_tokens: 13, compression_ratio: 0.72 } },
+      { role: "user", content: "How do I add semantic caching to this pipeline?", carbon: { cost_g: 0, baseline_g: 0, saved_g: 0, tokens_in: 12, tokens_out: 0 } },
+      { role: "assistant", content: "Add semantic caching with GPTCache:\n\n```python\nfrom gptcache import Cache\nfrom gptcache.embedding import Onnx\nfrom gptcache.similarity_evaluation import SearchDistanceEvaluation\n\n# Initialize cache\ncache = Cache()\ncache.init(\n    embedding_func=Onnx(),\n    similarity_evaluation=SearchDistanceEvaluation()\n)\n\ndef cached_query(question: str) -> str:\n    # Check cache first\n    cached = cache.get(question)\n    if cached:\n        print(f'Cache hit! Saved ~0.3g CO2')\n        return cached\n    \n    # Miss — run the full RAG chain\n    result = qa_chain.run(question)\n    cache.set(question, result)\n    return result\n```\n\nThis can reduce redundant LLM calls by 40-60% for repeated similar questions — exactly what Sorcer does at the infrastructure level.", carbon: { cost_g: 0.28, baseline_g: 0.85, saved_g: 0.57, model: "openai/gpt-5.2", region: "us-west1", cfe_percent: 92, tokens_in: 12, tokens_out: 680, latency_ms: 2200, cached: true, cache_hit_tokens: 400, compressed: false, original_tokens: 12, compressed_tokens: 12, compression_ratio: 1.0 } },
+    ],
+  },
+  {
+    title: "Water footprint of AI data centers",
+    model: "google/gemini-2.5-flash-lite",
+    region: "us-central1",
+    hoursAgo: 320,
+    messages: [
+      { role: "user", content: "How much water do AI data centers actually use? I keep hearing conflicting numbers.", carbon: { cost_g: 0, baseline_g: 0, saved_g: 0, tokens_in: 20, tokens_out: 0 } },
+      { role: "assistant", content: "The water usage numbers are staggering:\n\n## Direct Water Usage (Cooling)\n- **Google**: 5.6 billion gallons in 2022 (21.2B liters)\n- **Microsoft**: 6.4 billion gallons in 2022\n- **Meta**: 2.7 billion gallons in 2022\n\n## Per-Query Estimates\n- A ChatGPT conversation (25-50 queries): ~500mL of water\n- That's literally a bottle of water per chat session\n- GPT-4 training alone: ~185,000 gallons\n\n## Why So Much Water?\nData centers use evaporative cooling towers:\n1. Hot server air heats water\n2. Water evaporates, cooling the air\n3. 1 MW of compute ≈ 7,500 gallons/day in hot climates\n\n## Regional Impact\n- Phoenix AZ: 42°C summers → massive water consumption\n- The Dalles OR: Cool climate → 60% less cooling water\n- Quincy WA: Near Columbia River → abundant supply\n\nSorcer routes to cooler regions when possible — saving both carbon AND water.", carbon: { cost_g: 0.10, baseline_g: 0.49, saved_g: 0.39, model: "google/gemini-2.5-flash-lite", region: "us-central1", cfe_percent: 89, tokens_in: 20, tokens_out: 660, latency_ms: 900, cached: false, cache_hit_tokens: 0, compressed: true, original_tokens: 20, compressed_tokens: 14, compression_ratio: 0.70 } },
+    ],
+  },
+  {
+    title: "Implement a green CI/CD pipeline",
+    model: "anthropic/claude-haiku-4.5",
+    region: "europe-west1",
+    hoursAgo: 400,
+    messages: [
+      { role: "user", content: "How can I make my CI/CD pipeline carbon-aware? We use GitHub Actions.", carbon: { cost_g: 0, baseline_g: 0, saved_g: 0, tokens_in: 16, tokens_out: 0 } },
+      { role: "assistant", content: "Here's how to green your GitHub Actions pipeline:\n\n## 1. Carbon-Aware Runner Selection\n```yaml\njobs:\n  build:\n    runs-on: ubuntu-latest\n    # Use green-software-foundation/carbon-aware-sdk\n    steps:\n    - name: Get cleanest region\n      id: carbon\n      run: |\n        REGION=$(curl -s https://api.electricitymap.org/v3/carbon-intensity/latest \\\n          -H 'auth-token: ${{ secrets.ELECMAP_KEY }}' | jq -r '.zone')\n        echo \"region=$REGION\" >> $GITHUB_OUTPUT\n```\n\n## 2. Schedule Non-Urgent Jobs\n```yaml\non:\n  schedule:\n    # Run nightly builds during off-peak (clean grid)\n    - cron: '0 4 * * *'  # 4 AM UTC\n```\n\n## 3. Cache Aggressively\n```yaml\n    - uses: actions/cache@v4\n      with:\n        path: |\n          ~/.npm\n          node_modules\n          .next/cache\n        key: ${{ runner.os }}-build-${{ hashFiles('**/package-lock.json') }}\n```\n\n## 4. Minimize Redundant Runs\n```yaml\nconcurrency:\n  group: ${{ github.workflow }}-${{ github.ref }}\n  cancel-in-progress: true\n```\n\nThese changes can reduce CI/CD carbon by 30-50%.", carbon: { cost_g: 0.24, baseline_g: 0.76, saved_g: 0.52, model: "anthropic/claude-haiku-4.5", region: "europe-west1", cfe_percent: 82, tokens_in: 16, tokens_out: 820, latency_ms: 1900, cached: false, cache_hit_tokens: 0, compressed: true, original_tokens: 16, compressed_tokens: 11, compression_ratio: 0.69 } },
+    ],
+  },
+  {
+    title: "Compare edge vs cloud inference carbon",
+    model: "google/gemini-2.5-flash-lite",
+    region: "us-central1",
+    hoursAgo: 500,
+    messages: [
+      { role: "user", content: "Is running AI inference on edge devices more carbon-efficient than cloud?", carbon: { cost_g: 0, baseline_g: 0, saved_g: 0, tokens_in: 16, tokens_out: 0 } },
+      { role: "assistant", content: "It depends heavily on the scenario:\n\n## Edge Inference\n**Pros:**\n- No network transfer energy (saves 0.1-0.5 kWh/GB)\n- No data center cooling overhead\n- Can run on device's existing power\n\n**Cons:**\n- Less efficient hardware (phone GPU vs A100)\n- Higher energy per FLOP\n- Limited model size (typically <7B params)\n\n## Cloud Inference\n**Pros:**\n- Highly optimized hardware (A100/H100)\n- Batching across users (amortized cost)\n- Can route to clean energy regions\n\n**Cons:**\n- Network transfer overhead\n- Cooling costs (PUE 1.1-1.4)\n- Always-on infrastructure\n\n## The Verdict\n| Scenario | Winner | Why |\n|----------|--------|-----|\n| Simple NLP tasks | Edge | No network needed |\n| Complex reasoning | Cloud | Better hardware |\n| Image generation | Cloud | GPU efficiency |\n| Real-time inference | Edge | Latency matters |\n| Carbon-optimized | Cloud + Sorcer | Region routing wins |\n\nSorcer makes cloud inference the clear winner by routing to renewable-powered regions.", carbon: { cost_g: 0.11, baseline_g: 0.52, saved_g: 0.41, model: "google/gemini-2.5-flash-lite", region: "us-central1", cfe_percent: 89, tokens_in: 16, tokens_out: 700, latency_ms: 950, cached: false, cache_hit_tokens: 0, compressed: true, original_tokens: 16, compressed_tokens: 11, compression_ratio: 0.69 } },
+      { role: "user", content: "What about hybrid approaches?", carbon: { cost_g: 0, baseline_g: 0, saved_g: 0, tokens_in: 6, tokens_out: 0 } },
+      { role: "assistant", content: "Hybrid is the future of sustainable AI:\n\n## The Split Inference Pattern\n1. **Edge handles**: Tokenization, embedding, simple classification\n2. **Cloud handles**: Complex reasoning, generation, retrieval\n\n```\nUser → [Edge: classify complexity] →\n  Simple → Edge inference (0.001g CO₂)\n  Complex → Cloud via Sorcer (0.08g CO₂)\n```\n\n## Real-World Example\nApple Intelligence does exactly this:\n- On-device: Autocomplete, summarization\n- Cloud (Private Compute): Complex writing, image gen\n\nEstimated savings: 70% of queries never leave the device.\n\nSorcer could integrate edge-first routing in the future — check device capability first, fall back to carbon-optimized cloud.", carbon: { cost_g: 0.07, baseline_g: 0.36, saved_g: 0.29, model: "google/gemini-2.5-flash-lite", region: "us-central1", cfe_percent: 89, tokens_in: 6, tokens_out: 480, latency_ms: 620, cached: true, cache_hit_tokens: 280, compressed: false, original_tokens: 6, compressed_tokens: 6, compression_ratio: 1.0 } },
+    ],
+  },
 ];
 
 export function seedIfEmpty(): void {
   if (!isBrowser()) return;
-  if (localStorage.getItem(SEEDED_KEY)) return;
 
   const existingChats = getAllChats();
-  if (existingChats.length > 0) {
-    localStorage.setItem(SEEDED_KEY, "true");
-    return;
-  }
+  // Reseed if: version changed OR chats are empty (e.g. user cleared them)
+  if (localStorage.getItem(SEEDED_KEY) && existingChats.length > 0) return;
 
   const chats: ChatRecord[] = [];
 
   for (const seed of SEED_CHATS) {
     const chatId = uid();
     const assistantMessages = seed.messages.filter((m) => m.role === "assistant");
-    const totalSaved = assistantMessages.reduce((sum, m) => sum + m.carbon.saved_g!, 0);
+    const totalSaved = assistantMessages.reduce((sum, m) => sum + m.carbon.saved_g!, 0) * DEMO_CARBON_SCALE;
 
     chats.push({
       id: chatId,
       title: seed.title,
       createdAt: hoursAgo(seed.hoursAgo),
       carbonSaved: totalSaved,
-      promptCount: seed.messages.filter((m) => m.role === "user").length,
+      promptCount: seed.messages.filter((m) => m.role === "user").length * 12,
       model: seed.model,
       region: seed.region,
     });

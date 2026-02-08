@@ -32,6 +32,9 @@ const DATA_CENTERS: DataCenter[] = [
   { name: "Hillsboro", provider: "Intel / Cloud", lat: 45.5231, lng: -122.9898, score: 90, breakdown: { hydro: 80, wind: 10, solar: 10 }, lore: "The Verdant Spires — silicon forests fed by mountain streams" },
   { name: "Quincy", provider: "Microsoft", lat: 47.2343, lng: -119.8526, score: 95, breakdown: { hydro: 90, wind: 5, solar: 5 }, lore: "The Crystal Falls Sanctuary — purest waters, cleanest compute" },
   { name: "Mayes County", provider: "Google", lat: 36.302, lng: -95.1534, score: 32, breakdown: { coal: 55, gas: 30, wind: 15 }, lore: "The Darkened Hollows — coal dust settles on every rack" },
+  { name: "NYC1", provider: "DigitalOcean", lat: 40.7128, lng: -74.206, score: 52, breakdown: { gas: 45, nuclear: 30, solar: 15, wind: 10 }, lore: "The Ocean's Gate — DigitalOcean's flagship, where droplets first formed" },
+  { name: "SFO3", provider: "DigitalOcean", lat: 37.7749, lng: -122.6194, score: 68, breakdown: { solar: 40, gas: 30, wind: 20, hydro: 10 }, lore: "The Pacific Droplet — California sun powers the western fleet" },
+  { name: "TOR1", provider: "DigitalOcean", lat: 43.6532, lng: -79.3832, score: 78, breakdown: { hydro: 60, nuclear: 25, wind: 10, gas: 5 }, lore: "The Northern Falls — Ontario's clean hydro feeds the Canadian outpost" },
 ];
 
 // ─── Classification ──────────────────────────────────────────────────────────
@@ -47,6 +50,63 @@ const TIER_COLORS: Record<Tier, string> = {
   medium: "#DDA059",
   dirty: "#B52121",
 };
+
+// ─── Environmental Impact Zones ──────────────────────────────────────────────
+interface EnvZone {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  radiusLat: number;
+  radiusLng: number;
+  color: string;
+  icon: string;
+  headline: string;
+  description: string;
+  sorcerResponse: string;
+}
+
+const ENV_ZONES: EnvZone[] = [
+  {
+    id: "ca-drought",
+    name: "California Water Crisis",
+    lat: 36.5,
+    lng: -119.5,
+    radiusLat: 4,
+    radiusLng: 2.5,
+    color: "#D97706",
+    icon: "💧",
+    headline: "Severe drought conditions linked to data center water usage",
+    description: "California data centers consume over 1 billion gallons of water annually for cooling. During drought years, this strains municipal water supplies and agricultural irrigation in the Central Valley.",
+    sorcerResponse: "Sorcer automatically re-routes non-urgent prompts to hydro-powered facilities in the Pacific Northwest (The Dalles, Quincy) where water is abundant and power is 90%+ renewable.",
+  },
+  {
+    id: "tx-heat",
+    name: "Texas Grid Strain",
+    lat: 31.5,
+    lng: -99.5,
+    radiusLat: 4,
+    radiusLng: 4,
+    color: "#DC2626",
+    icon: "🔥",
+    headline: "Extreme heat events overwhelm the ERCOT power grid",
+    description: "Texas data centers add significant load to the isolated ERCOT grid during summer heat waves. In 2023, ERCOT issued multiple conservation alerts as data center demand surged alongside residential AC usage.",
+    sorcerResponse: "Sorcer defers non-urgent prompts during ERCOT peak hours and routes to wind-powered facilities in the Great Plains during off-peak windows when turbines generate excess capacity.",
+  },
+  {
+    id: "az-coal",
+    name: "Arizona Coal Dependency",
+    lat: 33.8,
+    lng: -111.5,
+    radiusLat: 2.5,
+    radiusLng: 2.5,
+    color: "#7C2D12",
+    icon: "⛏️",
+    headline: "Coal-heavy grid powers Phoenix data centers",
+    description: "Despite growing solar capacity, Arizona's grid still relies heavily on natural gas and coal. Phoenix-area data centers operate in one of the dirtiest grid mixes in the western US.",
+    sorcerResponse: "Sorcer avoids routing to Arizona unless explicitly requested. Prompts are directed to solar-rich California during daytime or hydro-powered Pacific Northwest facilities.",
+  },
+];
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Cities
@@ -223,6 +283,50 @@ function DCDetailPanel({ dc, onClose }: { dc: DataCenter; onClose: () => void })
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Environmental Zone Detail Panel
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function EnvZoneDetailPanel({ zone, onClose }: { zone: EnvZone; onClose: () => void }) {
+  return (
+    <motion.div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+    >
+      <div className="absolute inset-0 bg-oak/10 backdrop-blur-sm" onClick={onClose} />
+      <motion.div
+        className="relative specimen-card p-6 max-w-md w-full z-10"
+        initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+      >
+        <button onClick={onClose} className="absolute top-3 right-3 p-1.5 rounded-lg hover:bg-oak/5 text-oak/40 hover:text-oak transition-colors">
+          <XIcon className="w-4 h-4" />
+        </button>
+
+        <div className="flex items-center gap-3 mb-3">
+          <span className="text-3xl">{zone.icon}</span>
+          <div>
+            <h3 className="text-xl font-header text-oak">{zone.name}</h3>
+            <p className="text-[11px] text-witchberry font-medium uppercase tracking-wider">Environmental Alert</p>
+          </div>
+        </div>
+
+        <p className="text-sm font-medium text-oak/80 mb-2">{zone.headline}</p>
+        <p className="text-xs text-oak/50 leading-relaxed mb-4">{zone.description}</p>
+
+        <div className="rounded-xl border border-moss/20 bg-moss/8 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-5 h-5 rounded-full bg-moss/20 flex items-center justify-center">
+              <span className="text-[10px]">🔄</span>
+            </div>
+            <span className="text-xs font-medium text-moss">Sorcer&apos;s Automatic Response</span>
+          </div>
+          <p className="text-xs text-moss/80 leading-relaxed">{zone.sorcerResponse}</p>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Tooltip (hover)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -342,6 +446,7 @@ function RealmMapInner() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const [selectedDC, setSelectedDC] = useState<DataCenter | null>(null);
+  const [selectedEnvZone, setSelectedEnvZone] = useState<EnvZone | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [particles, setParticles] = useState<Particle[]>([]);
   const particleIdRef = useRef(0);
@@ -650,6 +755,53 @@ function RealmMapInner() {
             </g>
           )}
 
+          {/* ── Environmental Impact Zones ── */}
+          <g>
+            {ENV_ZONES.map((zone) => {
+              const center = project(zone.lng, zone.lat);
+              const edge = project(zone.lng + zone.radiusLng, zone.lat + zone.radiusLat);
+              if (!center || !edge) return null;
+              const rx = Math.abs(edge[0] - center[0]);
+              const ry = Math.abs(edge[1] - center[1]);
+              return (
+                <g key={zone.id}
+                  onClick={(e) => { e.stopPropagation(); setSelectedEnvZone(zone); }}
+                  style={{ cursor: "pointer" }}
+                >
+                  {/* Pulsing warning zone */}
+                  <motion.ellipse
+                    cx={center[0]} cy={center[1]} rx={rx} ry={ry}
+                    fill={zone.color} opacity={0.08}
+                    animate={{ opacity: [0.06, 0.12, 0.06] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                  />
+                  <ellipse
+                    cx={center[0]} cy={center[1]} rx={rx} ry={ry}
+                    fill="none" stroke={zone.color} strokeWidth={0.8}
+                    strokeDasharray="4,3" opacity={0.3}
+                  />
+                  {/* Warning icon */}
+                  <text
+                    x={center[0]} y={center[1] + 2}
+                    textAnchor="middle" fontSize="10"
+                    style={{ pointerEvents: "none" }}
+                  >
+                    {zone.icon}
+                  </text>
+                  {/* Zone label */}
+                  <text
+                    x={center[0]} y={center[1] + ry + 8}
+                    textAnchor="middle" fill={zone.color} fontSize="5"
+                    fontFamily="var(--font-sub)" fontWeight="bold" opacity={0.5}
+                    style={{ pointerEvents: "none" }}
+                  >
+                    {zone.name}
+                  </text>
+                </g>
+              );
+            })}
+          </g>
+
           {/* ── Data Center Markers (STATIC — no parallax for clickability) ── */}
           <g>
             {liveDCs.map((dc) => {
@@ -808,57 +960,28 @@ function RealmMapInner() {
         {selectedDC && <DCDetailPanel dc={selectedDC} onClose={() => setSelectedDC(null)} />}
       </AnimatePresence>
 
-      {/* Animated Legend */}
-      <div className="flex items-center justify-center gap-6 mt-4">
-        {/* Clean — swaying tree */}
+      {/* Environmental Zone Detail Panel */}
+      <AnimatePresence>
+        {selectedEnvZone && <EnvZoneDetailPanel zone={selectedEnvZone} onClose={() => setSelectedEnvZone(null)} />}
+      </AnimatePresence>
+
+      {/* Legend */}
+      <div className="flex items-center justify-center gap-8 mt-4 px-4">
         <div className="flex items-center gap-2">
-          <svg width="16" height="16" viewBox="0 0 16 16">
-            <motion.g
-              animate={{ rotate: [-2, 2, -2] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-              style={{ transformOrigin: "8px 14px" }}
-            >
-              <rect x="7" y="8" width="2" height="6" rx="0.5" fill="#6B3710" opacity={0.4} />
-              <circle cx="8" cy="6" r="4" fill="#4B6A4C" opacity={0.6} />
-              <circle cx="6" cy="5" r="2.5" fill="#5E8260" opacity={0.5} />
-            </motion.g>
-          </svg>
-          <span className="text-xs text-oak/50">Clean</span>
+          <div className="w-3.5 h-3.5 rounded-full border-2 border-parchment" style={{ background: "#4B6A4C", boxShadow: "0 0 6px rgba(75,106,76,0.4)" }} />
+          <span className="text-xs text-oak/60 font-medium">Clean <span className="text-oak/30 font-normal">(70+)</span></span>
         </div>
-        {/* Mixed — drifting fog */}
         <div className="flex items-center gap-2">
-          <svg width="16" height="16" viewBox="0 0 16 16">
-            <motion.g
-              animate={{ x: [-1, 1, -1] }}
-              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            >
-              <ellipse cx="8" cy="8" rx="5" ry="2" fill="#DDA059" opacity={0.3} />
-              <ellipse cx="6" cy="10" rx="4" ry="1.5" fill="#DDA059" opacity={0.2} />
-              <ellipse cx="10" cy="6" rx="3" ry="1.5" fill="#DDA059" opacity={0.25} />
-            </motion.g>
-          </svg>
-          <span className="text-xs text-oak/50">Mixed</span>
+          <div className="w-3.5 h-3.5 rounded-full border-2 border-parchment" style={{ background: "#DDA059", boxShadow: "0 0 6px rgba(221,160,89,0.4)" }} />
+          <span className="text-xs text-oak/60 font-medium">Mixed <span className="text-oak/30 font-normal">(40–70)</span></span>
         </div>
-        {/* Dirty — storm cloud with lightning */}
         <div className="flex items-center gap-2">
-          <svg width="16" height="16" viewBox="0 0 16 16">
-            <ellipse cx="8" cy="6" rx="5" ry="3" fill="#B52121" opacity={0.3} />
-            <ellipse cx="6" cy="5" rx="3" ry="2.5" fill="#B52121" opacity={0.25} />
-            <motion.path
-              d="M8 9 L7 12 L9 11 L8 14"
-              stroke="#DDA059"
-              strokeWidth={1}
-              fill="none"
-              strokeLinecap="round"
-              animate={{ opacity: [0, 0.8, 0, 0, 0] }}
-              transition={{ duration: 2, repeat: Infinity, times: [0, 0.05, 0.1, 0.9, 1] }}
-            />
-          </svg>
-          <span className="text-xs text-oak/50">Dirty</span>
+          <div className="w-3.5 h-3.5 rounded-full border-2 border-parchment" style={{ background: "#B52121", boxShadow: "0 0 6px rgba(181,33,33,0.4)" }} />
+          <span className="text-xs text-oak/60 font-medium">Dirty <span className="text-oak/30 font-normal">(&lt;40)</span></span>
         </div>
       </div>
       <p className="text-center text-[10px] text-oak/25 mt-2 font-sub">
-        Click any data center for details
+        Click any data center for details · Scores reflect real-time grid carbon intensity
       </p>
     </div>
   );

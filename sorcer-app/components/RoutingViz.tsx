@@ -21,7 +21,7 @@ function RoutingVizInner({ model, region, cfePercent }: RoutingVizProps) {
 
   const nodes = [
     { x: 40, y: 50, label: "Your Prompt", color: NODE_COLORS.prompt },
-    { x: 180, y: 50, label: "Carbon Oracle", color: NODE_COLORS.oracle },
+    { x: 180, y: 50, label: "Sorcer", color: NODE_COLORS.oracle },
     { x: 320, y: 50, label: region, color: NODE_COLORS.region, sub: `${cfePercent}% CFE` },
     { x: 460, y: 50, label: modelLabel, color: NODE_COLORS.model },
   ];

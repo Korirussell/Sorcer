@@ -66,6 +66,89 @@ function resultKey(planName: string, planIdx: number, stepNum: number): string {
   return `${planName}::${planIdx}::${stepNum}`;
 }
 
+const SEED_PROJECTS_KEY = "sorcer-agentic-seeded-v2";
+
+const SEED_PROJECTS: ProjectPlan[] = [
+  {
+    name: "Sustainable RAG Pipeline",
+    description: "Build a carbon-aware retrieval-augmented generation pipeline with semantic caching",
+    deadline: new Date(Date.now() + 7 * 86400000).toISOString(),
+    carbon_limit_g: 5.0,
+    prompt: "Build a RAG pipeline that uses semantic caching to reduce redundant LLM calls and routes inference to the cleanest available compute region.",
+    status: "planned",
+    total_estimated_carbon_g: 3.2,
+    total_savings_g: 4.8,
+    steps: [
+      { step_number: 1, title: "Research & Requirements", prompt: "Research best practices for carbon-aware RAG pipelines. Identify embedding models, vector stores, and caching strategies that minimize energy usage.", description: "Gather requirements and research green RAG patterns", model_choice: "google/gemini-2.5-flash-lite", scheduled_window: new Date(Date.now() - 2 * 86400000).toISOString(), estimated_carbon_g: 0.12, estimated_tokens: 1200, reasoning: ["Small model sufficient for research synthesis", "Scheduled during high-solar window"] },
+      { step_number: 2, title: "Architecture & Design", prompt: "Design the architecture: document ingestion → chunking → embedding → ChromaDB → retrieval → LLM generation, with a GPTCache layer for semantic dedup.", description: "Design system architecture with caching layer", model_choice: "anthropic/claude-haiku-4.5", scheduled_window: new Date(Date.now() - 1 * 86400000).toISOString(), estimated_carbon_g: 0.45, estimated_tokens: 3200, reasoning: ["Architecture requires stronger reasoning", "Haiku balances quality and carbon cost"] },
+      { step_number: 3, title: "Implementation", prompt: "Implement the pipeline in Python using LangChain, ChromaDB, and GPTCache. Include carbon tracking middleware that logs per-query emissions.", description: "Code the pipeline with carbon tracking", model_choice: "openai/gpt-5.2", scheduled_window: new Date(Date.now() + 1 * 86400000).toISOString(), estimated_carbon_g: 1.8, estimated_tokens: 8500, reasoning: ["Implementation requires top-tier code generation", "Largest carbon allocation for highest-impact step"] },
+      { step_number: 4, title: "Testing & Validation", prompt: "Write tests to verify cache hit rates exceed 40%, carbon per query stays under 0.2g, and retrieval quality remains above 85% relevance.", description: "Validate cache efficiency and carbon targets", model_choice: "google/gemini-2.5-flash-lite", scheduled_window: new Date(Date.now() + 2 * 86400000).toISOString(), estimated_carbon_g: 0.35, estimated_tokens: 2800, reasoning: ["Testing prompts are straightforward", "Eco model keeps validation costs low"] },
+      { step_number: 5, title: "Documentation & Deployment", prompt: "Generate README, API docs, and a carbon savings report. Include deployment instructions for clean-energy cloud regions.", description: "Document and deploy to green infrastructure", model_choice: "google/gemini-2.5-flash-lite", scheduled_window: new Date(Date.now() + 3 * 86400000).toISOString(), estimated_carbon_g: 0.48, estimated_tokens: 3500, reasoning: ["Documentation is generation-heavy but low-reasoning", "Deploy during predicted clean grid window"] },
+    ],
+    inner_monologue: [
+      "User wants a RAG pipeline — classic use case for semantic caching",
+      "Carbon limit of 5g is tight. I'll use smaller models for research/docs and save budget for implementation.",
+      "ChromaDB + GPTCache is the greenest stack — embeddings are computed once, cached forever.",
+      "Scheduling implementation step for tomorrow's solar peak in us-west1.",
+    ],
+  },
+  {
+    name: "Green API Gateway",
+    description: "Carbon-aware API gateway that routes requests to the cleanest available backend region",
+    deadline: new Date(Date.now() + 14 * 86400000).toISOString(),
+    carbon_limit_g: 8.0,
+    prompt: "Design and implement an API gateway that checks real-time grid carbon intensity and routes incoming requests to the backend region with the lowest carbon footprint.",
+    status: "planned",
+    total_estimated_carbon_g: 5.1,
+    total_savings_g: 12.4,
+    steps: [
+      { step_number: 1, title: "Research & Requirements", prompt: "Survey carbon intensity APIs (ElectricityMap, WattTime) and existing carbon-aware routing libraries. Identify latency vs carbon tradeoffs.", description: "Research carbon intensity data sources", model_choice: "google/gemini-2.5-flash-lite", scheduled_window: new Date(Date.now() - 5 * 86400000).toISOString(), estimated_carbon_g: 0.15, estimated_tokens: 1400, reasoning: ["Research task — small model is sufficient", "Low-stakes information gathering"] },
+      { step_number: 2, title: "Architecture & Design", prompt: "Design a multi-region routing layer: client → gateway → [score regions by carbon + latency + load] → best backend. Include fallback logic and SLA guarantees.", description: "Multi-region routing architecture with carbon scoring", model_choice: "anthropic/claude-haiku-4.5", scheduled_window: new Date(Date.now() - 3 * 86400000).toISOString(), estimated_carbon_g: 0.62, estimated_tokens: 4200, reasoning: ["Complex distributed systems design", "Need strong architectural reasoning"] },
+      { step_number: 3, title: "Implementation", prompt: "Implement the gateway in TypeScript/Node.js with Express. Integrate WattTime API for live grid scores. Add middleware for carbon budgets per API key.", description: "Build the gateway with live carbon scoring", model_choice: "openai/gpt-5.2", scheduled_window: new Date(Date.now() + 1 * 86400000).toISOString(), estimated_carbon_g: 2.4, estimated_tokens: 11000, reasoning: ["Heavy implementation — needs best code model", "Worth the carbon investment for core logic"] },
+      { step_number: 4, title: "Testing & Validation", prompt: "Load test the gateway. Verify routing decisions are carbon-optimal. Measure added latency overhead (target: <50ms).", description: "Performance and carbon-optimality testing", model_choice: "anthropic/claude-haiku-4.5", scheduled_window: new Date(Date.now() + 3 * 86400000).toISOString(), estimated_carbon_g: 0.78, estimated_tokens: 5500, reasoning: ["Test analysis requires reasoning but not max capability", "Balanced model for analysis tasks"] },
+      { step_number: 5, title: "Documentation & Deployment", prompt: "Write operator docs, Grafana dashboard configs for carbon metrics, and Terraform modules for multi-region deployment.", description: "Ops docs, dashboards, and IaC deployment", model_choice: "google/gemini-2.5-flash-lite", scheduled_window: new Date(Date.now() + 5 * 86400000).toISOString(), estimated_carbon_g: 1.15, estimated_tokens: 8000, reasoning: ["Documentation generation — eco model handles well", "Schedule during predicted clean grid window"] },
+    ],
+    inner_monologue: [
+      "API gateway routing is the highest-leverage carbon optimization — every request benefits.",
+      "8g carbon budget is generous. I'll front-load research on cheap models.",
+      "WattTime gives 5-min resolution grid data — perfect for real-time routing decisions.",
+      "The implementation step is the most expensive but creates the most ongoing savings.",
+      "Estimated 12.4g ongoing savings per day once deployed — ROI in under an hour of operation.",
+    ],
+  },
+];
+
+function seedProjectsIfEmpty(): void {
+  if (typeof window === "undefined") return;
+  const existing = loadPlans();
+  // Reseed if: version changed OR projects are empty
+  if (localStorage.getItem(SEED_PROJECTS_KEY) && existing.length > 0) return;
+  savePlans(SEED_PROJECTS);
+
+  // Also seed completed results for the first step of each project
+  const seedResults: ResultsMap = {};
+  seedResults[resultKey(SEED_PROJECTS[0].name, 0, 1)] = {
+    step_number: 1,
+    title: "Research & Requirements",
+    model_used: "google/gemini-2.5-flash-lite",
+    output: "## RAG Pipeline Research Summary\n\n### Recommended Stack\n- **Embeddings**: `text-embedding-3-small` (0.4x energy of large)\n- **Vector Store**: ChromaDB (local, no network overhead)\n- **Cache Layer**: GPTCache with ONNX embeddings\n- **LLM**: Route via Sorcer for carbon-optimal selection\n\n### Key Findings\n1. Semantic caching reduces LLM calls by 40-60% for FAQ-style workloads\n2. Smaller embedding models lose <2% accuracy but save 60% energy\n3. Local vector stores eliminate network transfer carbon\n4. Chunking at 500 tokens with 50-token overlap is optimal for most docs\n\n### Carbon Estimates\n- Embedding 1000 docs: ~0.02g CO₂\n- Per cached query: ~0.001g CO₂ (vs 0.15g uncached)\n- Break-even: ~15 cache hits to offset setup cost",
+    elapsed_ms: 2340,
+    estimated_carbon_g: 0.09,
+    executed_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+  };
+  seedResults[resultKey(SEED_PROJECTS[1].name, 1, 1)] = {
+    step_number: 1,
+    title: "Research & Requirements",
+    model_used: "google/gemini-2.5-flash-lite",
+    output: "## Carbon-Aware Routing Research\n\n### Data Sources\n- **WattTime**: Real-time marginal emissions, 5-min resolution, US coverage\n- **ElectricityMap**: Global coverage, zone-level, free tier available\n- **Electricity Maps API**: Historical + forecast data\n\n### Existing Libraries\n- `carbon-aware-sdk` (Green Software Foundation) — C#, basic routing\n- `cloud-carbon-footprint` — AWS/GCP/Azure emission tracking\n- No production-ready TypeScript routing gateway exists\n\n### Key Tradeoffs\n| Factor | Weight | Notes |\n|--------|--------|-------|\n| Carbon intensity | 40% | Primary optimization target |\n| Latency | 30% | Must stay under SLA |\n| Server load | 20% | Avoid overloading clean regions |\n| Cost | 10% | Clean regions often cheaper |\n\n### Recommendation\nBuild custom gateway. Existing tools are monitoring-only, not routing-capable.",
+    elapsed_ms: 1890,
+    estimated_carbon_g: 0.11,
+    executed_at: new Date(Date.now() - 5 * 86400000).toISOString(),
+  };
+  saveResults(seedResults);
+  localStorage.setItem(SEED_PROJECTS_KEY, "true");
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────
 
 function formatWindow(iso: string): string {
@@ -664,6 +747,7 @@ export default function ProjectsPage() {
 
   // Hydrate from localStorage on mount
   useEffect(() => {
+    seedProjectsIfEmpty();
     const stored = loadPlans();
     const storedResults = loadResults();
     if (stored.length > 0) {

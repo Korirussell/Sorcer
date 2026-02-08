@@ -43,6 +43,11 @@ export interface OrchestrateResponse {
   task_id?: string;
   message?: string;
   eco_stats?: Record<string, unknown>;
+  was_cached?: boolean;
+  cache_type?: "hash" | "semantic" | null;
+  input_tokens?: number;
+  compressed_text_tokens?: number;
+  compressed_prompt?: string;
 }
 
 export interface Receipt {

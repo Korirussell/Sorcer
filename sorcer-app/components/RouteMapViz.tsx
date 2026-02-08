@@ -140,7 +140,7 @@ function RouteMapVizInner({ model, region, cfePercent }: RouteMapVizProps) {
               animate={{ r: [12, 16, 12] }} transition={{ duration: 2, repeat: Infinity }} />
             <circle cx={atlPt[0]} cy={atlPt[1]} r={7} fill="rgba(107,55,16,0.12)" />
             <circle cx={atlPt[0]} cy={atlPt[1]} r={3.5} fill="#6B3710" stroke="#F7F3E8" strokeWidth={1.5} />
-            <text x={atlPt[0]} y={atlPt[1] + 18} textAnchor="middle" fill="#6B3710" fontSize="9" fontWeight="bold" opacity={0.7}>Atlanta (You)</text>
+            <text x={atlPt[0]} y={atlPt[1] + 18} textAnchor="middle" fill="#6B3710" fontSize="9" fontWeight="bold" opacity={0.7}>You (Atlanta)</text>
           </motion.g>
 
           {/* Destination server */}

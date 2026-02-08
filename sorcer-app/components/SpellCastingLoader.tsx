@@ -81,7 +81,7 @@ function SpellCastingLoaderInner({ status, className = "" }: SpellCastingLoaderP
           animate={{ opacity: [0.5, 1, 0.5] }}
           transition={{ duration: 2, repeat: Infinity }}
         >
-          {isStreaming ? "Channeling response..." : "Consulting the Oracle..."}
+          {isStreaming ? "Channeling response..." : "Finding sustainable energy source..."}
         </motion.span>
         {/* Animated dots */}
         <div className="flex gap-0.5 mt-0.5">

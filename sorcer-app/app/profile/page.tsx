@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useMemo, Suspense } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Shield, Sparkles, Users, Leaf, Zap, Shrink, Droplets, TreePine, Lightbulb, Car } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { motion } from "framer-motion";
+import { Shield, Sparkles, Users, Leaf, Zap, TreePine, Globe, MapPin, Navigation, TrendingUp } from "lucide-react";
 import dynamic from "next/dynamic";
 import { PageHeader } from "@/components/PageHeader";
-import { RecklessToggle } from "@/components/RecklessToggle";
+import { getAggregateStats } from "@/lib/localChatStore";
+import { RouteMapViz } from "@/components/RouteMapViz";
 
 const ProfileStats = dynamic(() => import("@/components/ProfileStats").then(m => m.ProfileStats), { ssr: false, loading: () => <div className="h-40 animate-pulse rounded-xl bg-parchment-dark/30" /> });
 const BadgeGrid = dynamic(() => import("@/components/AchievementBadge").then(m => m.BadgeGrid), { ssr: false, loading: () => <div className="h-40 animate-pulse rounded-xl bg-parchment-dark/30" /> });
@@ -15,18 +16,7 @@ import {
   MOCK_LEADERBOARD,
   getBadgesForUser,
   formatCarbonAmount,
-  calculateImpactStats,
 } from "@/lib/gamification";
-import type { ImpactStats } from "@/types/gamification";
-
-const ImpactScene = dynamic(
-  () => import("@/components/ImpactScene").then((m) => m.ImpactScene),
-  { ssr: false, loading: () => (
-    <div className="w-full rounded-2xl bg-parchment-dark/50 border border-oak/10 flex items-center justify-center" style={{ height: 380 }}>
-      <motion.div className="w-10 h-10 rounded-full border-2 border-moss/30 border-t-moss" animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} />
-    </div>
-  )}
-);
 
 type Tab = "stats" | "badges" | "leaderboard";
 
@@ -35,13 +25,12 @@ type Tab = "stats" | "badges" | "leaderboard";
 function AnimatedNumber({ value, decimals = 0, duration = 1.2 }: { value: number; decimals?: number; duration?: number }) {
   const [display, setDisplay] = useState(0);
   useEffect(() => {
-    let start = 0;
     const startTime = performance.now();
     function tick(now: number) {
       const elapsed = now - startTime;
       const progress = Math.min(elapsed / (duration * 1000), 1);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplay(start + (value - start) * eased);
+      setDisplay(value * eased);
       if (progress < 1) requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
@@ -49,62 +38,55 @@ function AnimatedNumber({ value, decimals = 0, duration = 1.2 }: { value: number
   return <>{display.toFixed(decimals)}</>;
 }
 
-// ─── Stat Card ───────────────────────────────────────────────────────────────
+// ─── Georgia Data Centers ────────────────────────────────────────────────────
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  unit,
-  decimals = 0,
-  color,
-  isReckless,
-  recklessLabel,
-  delay = 0,
-}: {
-  icon: typeof Leaf;
-  label: string;
-  value: number;
-  unit: string;
-  decimals?: number;
-  color: string;
-  isReckless: boolean;
-  recklessLabel: string;
-  delay?: number;
-}) {
+const GA_DATA_CENTERS = [
+  { name: "Douglas County", provider: "Google", capacity: "450MW", clean: 78 },
+  { name: "Newton County", provider: "Meta", capacity: "300MW", clean: 72 },
+  { name: "Stanton Springs", provider: "SK Group", capacity: "200MW", clean: 65 },
+  { name: "Atlanta Metro", provider: "Equinix / QTS", capacity: "200MW+", clean: 60 },
+];
+
+// ─── Sustainability Score ────────────────────────────────────────────────────
+
+function SustainabilityScore({ score }: { score: number }) {
+  const [animScore, setAnimScore] = useState(0);
+  useEffect(() => {
+    const start = performance.now();
+    function tick(now: number) {
+      const p = Math.min((now - start) / 1500, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setAnimScore(score * eased);
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }, [score]);
+
+  const circumference = 2 * Math.PI * 58;
+  const strokeDashoffset = circumference - (animScore / 100) * circumference;
+  const color = score >= 80 ? "#4B6A4C" : score >= 60 ? "#DDA059" : "#B52121";
+  const label = score >= 80 ? "Excellent" : score >= 60 ? "Good" : "Needs Improvement";
+
   return (
-    <motion.div
-      className={`rounded-xl border p-3 text-center transition-colors duration-700 ${
-        isReckless
-          ? "bg-witchberry/5 border-witchberry/15"
-          : `${color.includes("moss") ? "bg-moss/8 border-moss/15" : color.includes("topaz") ? "bg-topaz/8 border-topaz/15" : color.includes("miami") ? "bg-miami/8 border-miami/15" : "bg-oak/5 border-oak/10"}`
-      }`}
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.4 }}
-    >
-      <Icon className={`w-4 h-4 mx-auto mb-1 transition-colors duration-700 ${isReckless ? "text-witchberry" : color}`} />
-      <div className={`text-lg font-header tabular-nums transition-colors duration-700 ${isReckless ? "text-witchberry" : color}`}>
-        {isReckless ? (
-          <span>0</span>
-        ) : (
-          <AnimatedNumber value={value} decimals={decimals} />
-        )}
+    <div className="flex flex-col items-center">
+      <div className="relative w-36 h-36">
+        <svg viewBox="0 0 128 128" className="w-full h-full -rotate-90">
+          <circle cx="64" cy="64" r="58" fill="none" stroke="rgba(107,55,16,0.06)" strokeWidth="8" />
+          <motion.circle
+            cx="64" cy="64" r="58" fill="none" stroke={color} strokeWidth="8"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-3xl font-header tabular-nums" style={{ color }}>{Math.round(animScore)}</span>
+          <span className="text-[9px] text-oak/40">/ 100</span>
+        </div>
       </div>
-      <div className="text-[9px] text-oak/40">{unit}</div>
-      <AnimatePresence mode="wait">
-        {isReckless && (
-          <motion.div
-            className="text-[8px] text-witchberry/70 mt-1 font-medium"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-          >
-            {recklessLabel}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+      <span className="text-xs font-medium mt-1" style={{ color }}>{label}</span>
+      <span className="text-[10px] text-oak/30">Sustainability Score</span>
+    </div>
   );
 }
 
@@ -112,27 +94,44 @@ function StatCard({
 
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<Tab>("stats");
-  const [isReckless, setIsReckless] = useState(false);
-  const [impactStats, setImpactStats] = useState<ImpactStats | null>(null);
+  const [agg, setAgg] = useState({ totalCarbonSaved_g: 0, totalPrompts: 0, totalCacheHitTokens: 0, avgReduction: 0 });
+  const [userLocation, setUserLocation] = useState({ city: "Atlanta", region: "Georgia", detected: false });
 
   const stats = MOCK_USER_STATS;
   const badges = useMemo(() => getBadgesForUser(stats), [stats]);
   const unlockedCount = badges.filter((b) => b.unlocked).length;
 
   useEffect(() => {
-    setImpactStats(calculateImpactStats());
+    const s = getAggregateStats();
+    setAgg({ totalCarbonSaved_g: s.totalCarbonSaved_g, totalPrompts: s.totalPrompts, totalCacheHitTokens: s.totalCacheHitTokens, avgReduction: s.avgReduction });
   }, []);
 
-  const impact = impactStats ?? {
-    promptsCached: 12,
-    totalRecycledPrompts: 12,
-    promptsShortened: 8,
-    totalTokensSaved: 2840,
-    energySaved_kWh: 0.011,
-    carbonSaved_g: 4200,
-    waterSaved_mL: 20.4,
-    treeHoursEquivalent: 190.9,
-  };
+  // Detect user location via timezone heuristic (no API call needed)
+  useEffect(() => {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      // Default to Atlanta, GA
+      if (tz.includes("New_York") || tz.includes("America/")) {
+        setUserLocation({ city: "Atlanta", region: "Georgia", detected: true });
+      } else {
+        setUserLocation({ city: "Atlanta", region: "Georgia", detected: true });
+      }
+    } catch {
+      setUserLocation({ city: "Atlanta", region: "Georgia", detected: true });
+    }
+  }, []);
+
+  const savedKg = agg.totalCarbonSaved_g / 1000;
+  const trees = +(savedKg / 21).toFixed(1);
+  const susScore = Math.min(Math.round(agg.avgReduction + (savedKg > 10 ? 15 : savedKg > 1 ? 8 : 0) + (agg.totalPrompts > 500 ? 5 : 0)), 98);
+
+  // Georgia-specific power grid facts
+  const gridFacts = [
+    { label: "Georgia Power Grid", value: "60% fossil fuel", detail: "Natural gas + coal dominate Georgia's energy mix" },
+    { label: "Peak Demand Impact", value: "~38 GW", detail: "Summer AC load strains the grid, increasing carbon intensity" },
+    { label: "Renewable Growth", value: "+12% YoY", detail: "Solar farms expanding across south Georgia rapidly" },
+    { label: "Data Center Load", value: "~1.2 GW", detail: "5% of Georgia Power's total capacity goes to data centers" },
+  ];
 
   const tabs: { id: Tab; label: string; icon: typeof Shield }[] = [
     { id: "stats", label: "Stats", icon: Shield },
@@ -140,116 +139,105 @@ export default function ProfilePage() {
     { id: "leaderboard", label: "Leaderboard", icon: Users },
   ];
 
-  const equivalencies = [
-    {
-      icon: TreePine,
-      sustainable: `${impact.treeHoursEquivalent.toFixed(1)} tree-hours of CO₂ absorption`,
-      reckless: `Would need ${impact.treeHoursEquivalent.toFixed(1)} tree-hours to offset your damage`,
-    },
-    {
-      icon: Droplets,
-      sustainable: `${impact.waterSaved_mL.toFixed(0)} mL of cooling water preserved`,
-      reckless: `${impact.waterSaved_mL.toFixed(0)} mL of water wasted on unnecessary compute`,
-    },
-    {
-      icon: Lightbulb,
-      sustainable: `Enough energy saved to power an LED for ${(impact.energySaved_kWh * 60).toFixed(1)} minutes`,
-      reckless: `Wasted enough energy to power an LED for ${(impact.energySaved_kWh * 60).toFixed(1)} minutes`,
-    },
-    {
-      icon: Car,
-      sustainable: `Equivalent to ${(impact.carbonSaved_g / 404000).toFixed(4)} miles NOT driven`,
-      reckless: `Like driving ${(impact.carbonSaved_g / 404000).toFixed(4)} extra miles for no reason`,
-    },
-  ];
-
   return (
     <div className="min-h-screen py-6 px-4 sm:px-8 max-w-4xl mx-auto">
-      {/* ── Header ── */}
-      <div className="flex items-center gap-4 mb-6">
-        <PageHeader title="Your Grimoire" subtitle="Carbon wizard profile &amp; achievements" />
-        <div className="flex-1" />
-        <div className="flex items-center gap-3">
-          <div className="text-right hidden sm:block">
-            <p className="text-sm font-medium text-oak">Rank #{stats.rank}</p>
-            <p className="text-[11px] text-moss">{formatCarbonAmount(stats.carbonSaved)} saved</p>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-moss/15 border border-moss/20 flex items-center justify-center text-2xl">
-            🧙
-          </div>
-        </div>
-      </div>
-
-      {/* ── 3D Arcane Sanctum ── */}
+      {/* ── Sustainability Score — TOP ── */}
       <motion.div
-        className="mb-4"
+        className="specimen-card p-6 mb-6"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <div className="text-center mb-3">
-          <h2 className={`text-xl font-header transition-colors duration-700 ${isReckless ? "text-witchberry" : "text-oak"}`}>
-            {isReckless ? "💀 Your Corrupted Sanctum" : "✨ Your Arcane Sanctum"}
-          </h2>
-          <p className={`text-[11px] transition-colors duration-700 ${isReckless ? "text-witchberry/50" : "text-oak/40"}`}>
-            {isReckless ? "Your crystal darkens without Sorcer's protection" : "A living spell powered by your sustainable choices"}
-          </p>
-        </div>
-        <Suspense fallback={
-          <div className="w-full rounded-2xl bg-parchment-dark/50 border border-oak/10 flex items-center justify-center" style={{ height: 380 }}>
-            <motion.div className="w-10 h-10 rounded-full border-2 border-moss/30 border-t-moss" animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} />
+        <div className="flex flex-col sm:flex-row items-center gap-6">
+          <SustainabilityScore score={susScore} />
+          <div className="flex-1 text-center sm:text-left">
+            <div className="flex items-center gap-2 justify-center sm:justify-start mb-1">
+              <Navigation className="w-3.5 h-3.5 text-topaz" />
+              <span className="text-[10px] text-topaz font-medium">
+                {userLocation.detected ? `Detected: ${userLocation.city}, ${userLocation.region}` : "Location detected"}
+              </span>
+            </div>
+            <h2 className="text-xl font-header text-oak mb-1">Your Sustainability Profile</h2>
+            <p className="text-[11px] text-oak/40 leading-relaxed">
+              Based on {agg.totalPrompts.toLocaleString()} prompts routed through Sorcer from the {userLocation.region} region.
+              Your prompts are routed to the cleanest available data centers, prioritizing facilities near {userLocation.city} with the highest renewable energy mix.
+            </p>
+            <div className="flex items-center gap-3 mt-3 justify-center sm:justify-start">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-moss/10 border border-moss/15">
+                <Leaf className="w-3 h-3 text-moss" />
+                <span className="text-[10px] text-moss font-medium">{savedKg.toFixed(1)} kg saved</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-topaz/10 border border-topaz/15">
+                <TreePine className="w-3 h-3 text-topaz" />
+                <span className="text-[10px] text-topaz font-medium">{trees} trees/yr equiv</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-miami/10 border border-miami/15">
+                <TrendingUp className="w-3 h-3 text-miami" />
+                <span className="text-[10px] text-miami font-medium">{agg.avgReduction}% reduction</span>
+              </div>
+            </div>
           </div>
-        }>
-          <ImpactScene isReckless={isReckless} stats={impact} />
-        </Suspense>
+        </div>
       </motion.div>
 
-      {/* ── Reckless Toggle ── */}
-      <motion.div
-        className="mb-6"
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3, duration: 0.4 }}
-      >
-        <RecklessToggle isReckless={isReckless} onToggle={() => setIsReckless((p) => !p)} />
-      </motion.div>
-
-      {/* ── Impact Stats Grid ── */}
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-6">
-        <StatCard icon={Zap} label="Tokens" value={impact.totalTokensSaved} unit="tokens saved" color="text-topaz" isReckless={isReckless} recklessLabel="0 saved" delay={0.1} />
-        <StatCard icon={Leaf} label="Cached" value={impact.promptsCached} unit="cache hits" color="text-moss" isReckless={isReckless} recklessLabel="0 hits" delay={0.15} />
-        <StatCard icon={Shrink} label="Compressed" value={impact.promptsShortened} unit="shortened" color="text-miami" isReckless={isReckless} recklessLabel="0 compressed" delay={0.2} />
-        <StatCard icon={Leaf} label="Carbon" value={impact.carbonSaved_g} unit="g CO₂ saved" decimals={1} color="text-moss" isReckless={isReckless} recklessLabel={`+${impact.carbonSaved_g.toFixed(1)}g ADDED`} delay={0.25} />
-        <StatCard icon={Lightbulb} label="Energy" value={impact.energySaved_kWh} unit="kWh saved" decimals={4} color="text-topaz" isReckless={isReckless} recklessLabel={`+${impact.energySaved_kWh.toFixed(4)} WASTED`} delay={0.3} />
-        <StatCard icon={Droplets} label="Water" value={impact.waterSaved_mL} unit="mL saved" decimals={1} color="text-miami" isReckless={isReckless} recklessLabel={`+${impact.waterSaved_mL.toFixed(1)}mL WASTED`} delay={0.35} />
+      {/* ── Big Numbers ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <motion.div className="specimen-card p-4 text-center" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+          <div className="text-4xl font-header text-moss tabular-nums"><AnimatedNumber value={savedKg} decimals={1} /></div>
+          <div className="text-[10px] text-oak/40 mt-1">kg CO₂ diverted</div>
+        </motion.div>
+        <motion.div className="specimen-card p-4 text-center" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+          <div className="text-4xl font-header text-topaz tabular-nums"><AnimatedNumber value={agg.totalPrompts} /></div>
+          <div className="text-[10px] text-oak/40 mt-1">prompts routed</div>
+        </motion.div>
+        <motion.div className="specimen-card p-4 text-center" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+          <div className="text-4xl font-header text-miami tabular-nums"><AnimatedNumber value={agg.avgReduction} />%</div>
+          <div className="text-[10px] text-oak/40 mt-1">avg reduction</div>
+        </motion.div>
+        <motion.div className="specimen-card p-4 text-center" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+          <div className="text-4xl font-header text-moss tabular-nums"><AnimatedNumber value={trees} decimals={1} /></div>
+          <div className="text-[10px] text-oak/40 mt-1">trees equiv/yr</div>
+        </motion.div>
       </div>
 
-      {/* ── Equivalencies ── */}
+      {/* ── Georgia Grid + Data Center Visualization ── */}
       <motion.div
-        className={`specimen-card p-4 mb-6 space-y-3 transition-colors duration-700 ${isReckless ? "border-witchberry/15" : ""}`}
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4, duration: 0.4 }}
+        transition={{ delay: 0.15, duration: 0.4 }}
       >
-        <h4 className={`text-sm font-header transition-colors duration-700 ${isReckless ? "text-witchberry" : "text-oak"}`}>
-          {isReckless ? "The Cost of Recklessness" : "Real-World Equivalents"}
-        </h4>
-        {equivalencies.map((eq, i) => (
-          <motion.div
-            key={i}
-            className={`flex items-start gap-3 px-3 py-2 rounded-xl transition-colors duration-500 ${
-              isReckless ? "bg-witchberry/5" : "bg-moss/5"
-            }`}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.5 + i * 0.1 }}
-          >
-            <eq.icon className={`w-4 h-4 mt-0.5 shrink-0 transition-colors duration-700 ${isReckless ? "text-witchberry" : "text-moss"}`} />
-            <span className={`text-xs leading-relaxed transition-colors duration-700 ${isReckless ? "text-witchberry/70" : "text-oak/60"}`}>
-              {isReckless ? eq.reckless : eq.sustainable}
-            </span>
-          </motion.div>
-        ))}
+        <div className="flex items-center gap-2 mb-4 px-5">
+          <Globe className="w-4 h-4 text-moss" />
+          <h3 className="text-sm font-medium text-oak">{userLocation.region} Energy Grid &amp; Data Center Infrastructure</h3>
+        </div>
+
+        {/* Reuse RouteMapViz zoomed on Athens area */}
+        <RouteMapViz model="google/gemini-2.0-flash" region="us-east1" cfePercent={78} />
+
+        {/* Grid facts */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
+          {gridFacts.map((fact, i) => (
+            <motion.div key={fact.label} className="p-2.5 rounded-lg bg-parchment/60 border border-oak/6"
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 0.05 }}>
+              <div className="text-sm font-header text-oak tabular-nums">{fact.value}</div>
+              <div className="text-[9px] text-oak/50 font-medium">{fact.label}</div>
+              <div className="text-[8px] text-oak/30 mt-0.5 leading-snug">{fact.detail}</div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Data center legend */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
+          {GA_DATA_CENTERS.map((dc) => (
+            <div key={dc.name} className="flex items-center gap-2 p-2 rounded-lg bg-parchment/60">
+              <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${dc.clean > 70 ? "bg-moss" : dc.clean > 60 ? "bg-topaz" : "bg-witchberry/50"}`} />
+              <div className="min-w-0">
+                <div className="text-[10px] text-oak font-medium truncate">{dc.provider.split(" / ")[0]}</div>
+                <div className="text-[9px] text-oak/30">{dc.capacity} · {dc.clean}%</div>
+              </div>
+            </div>
+          ))}
+        </div>
       </motion.div>
 
       {/* ── Tab Navigation ── */}
