@@ -127,9 +127,9 @@ export function OnboardingTour() {
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop — no blur so highlighted item stays crisp */}
       <motion.div
-        className="fixed inset-0 z-60 bg-oak/10 backdrop-blur-[2px]"
+        className="fixed inset-0 z-60"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}

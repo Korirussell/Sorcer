@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePathname } from "next/navigation";
 
@@ -21,7 +22,7 @@ const pageVariants = {
   },
 };
 
-export function PageTransition({ children }: { children: React.ReactNode }) {
+function PageTransitionInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
@@ -37,5 +38,13 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
         {children}
       </motion.div>
     </AnimatePresence>
+  );
+}
+
+export function PageTransition({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={<div>{children}</div>}>
+      <PageTransitionInner>{children}</PageTransitionInner>
+    </Suspense>
   );
 }

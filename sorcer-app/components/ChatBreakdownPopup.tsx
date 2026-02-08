@@ -66,10 +66,9 @@ function RouteMapMini({ region }: { region: string }) {
         <motion.circle
           r={1.5}
           fill="#B52121"
-          initial={{ offsetDistance: "0%" }}
-          animate={{ offsetDistance: "100%" }}
+          initial={{ cx: USER_POS.x, cy: USER_POS.y }}
+          animate={{ cx: dest.x, cy: dest.y }}
           transition={{ duration: 2, ease: "easeInOut", repeat: Infinity, repeatDelay: 1 }}
-          style={{ offsetPath: `path('${pathD}')` } as React.CSSProperties}
         />
 
         {/* User location */}

@@ -6,6 +6,7 @@ import { Send, Leaf, Zap, Flame, Sprout, ChevronDown, Clock } from "lucide-react
 import { toast } from "sonner";
 import { useEnergy } from "@/context/EnergyContext";
 import { SearchVines } from "./SearchVines";
+import { postOrchestrate } from "@/utils/api";
 
 function setCookie(name: string, value: string) {
   const maxAge = 60 * 60 * 24 * 365;
@@ -285,11 +286,43 @@ export function SpellBar({
               <button
                 key={opt.value}
                 type="button"
-                onClick={() => {
-                  if (input.trim()) {
-                    toast.success(`Prompt scheduled: ${opt.label}`, { description: input.trim().slice(0, 60) + (input.trim().length > 60 ? "..." : "") });
-                    setInput("");
-                    setIsScheduleOpen(false);
+                onClick={async () => {
+                  if (!input.trim()) return;
+                  const prompt = input.trim();
+                  setInput("");
+                  setIsScheduleOpen(false);
+                  // Compute deadline from schedule option
+                  const now = new Date();
+                  let deadline: string;
+                  if (opt.value === "6h") {
+                    deadline = new Date(now.getTime() + 6 * 3600000).toISOString();
+                  } else if (opt.value === "tonight") {
+                    const tonight = new Date(now);
+                    tonight.setHours(23, 0, 0, 0);
+                    deadline = tonight.toISOString();
+                  } else {
+                    deadline = new Date(now.getTime() + 24 * 3600000).toISOString();
+                  }
+                  try {
+                    const result = await postOrchestrate({
+                      prompt,
+                      user_id: "sorcer-user",
+                      project_id: "scheduled",
+                      deadline,
+                    });
+                    if (result.deferred) {
+                      toast.success(`Prompt scheduled: ${opt.label}`, {
+                        description: `Task #${result.task_id} queued — will run when grid is cleaner`,
+                      });
+                    } else {
+                      toast.success("Prompt executed immediately", {
+                        description: "Grid was already clean enough!",
+                      });
+                    }
+                  } catch {
+                    toast.error("Backend offline", {
+                      description: "Scheduling requires the backend. Start it and try again.",
+                    });
                   }
                 }}
                 className="w-full text-left px-3 py-2.5 text-sm text-oak hover:bg-moss/8 transition-colors flex items-center gap-2"

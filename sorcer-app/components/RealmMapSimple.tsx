@@ -217,10 +217,6 @@ function DCDetailPanel({ dc, onClose }: { dc: DataCenter; onClose: () => void })
           &ldquo;{dc.lore}&rdquo;
         </p>
 
-        {/* Action button */}
-        <button className="mt-4 w-full py-2.5 rounded-xl bg-moss/15 text-moss text-sm font-medium hover:bg-moss/25 transition-colors border border-moss/20">
-          Route prompts here
-        </button>
       </motion.div>
     </motion.div>
   );
@@ -406,26 +402,24 @@ function RealmMapInner() {
   const handleZoomOut = useCallback(() => setZoom((z) => Math.max(z - 0.25, 1)), []);
   const handleZoomReset = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, []);
 
-  // Mouse wheel zoom (Ctrl/Cmd held)
+  // Mouse wheel zoom (no modifier key needed)
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const handler = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.15 : 0.15;
+      const delta = e.deltaY > 0 ? -0.12 : 0.12;
       setZoom((z) => Math.min(Math.max(z + delta, 1), 3));
     };
     el.addEventListener("wheel", handler, { passive: false });
     return () => el.removeEventListener("wheel", handler);
   }, []);
 
-  // Pan handlers (click-and-drag when zoomed)
+  // Pan handlers (click-and-drag)
   const handlePanStart = useCallback((e: React.MouseEvent) => {
-    if (zoom <= 1) return;
     setIsPanning(true);
     panStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
-  }, [zoom, pan]);
+  }, [pan]);
 
   const handlePanMove = useCallback((e: React.MouseEvent) => {
     if (!isPanning) return;
@@ -532,11 +526,11 @@ function RealmMapInner() {
           border: "2px solid rgba(107, 55, 16, 0.25)",
           background: "linear-gradient(135deg, #F7F3E8 0%, #EDE8D6 50%, #E8E0CC 100%)",
           aspectRatio: `${MAP_W} / ${MAP_H}`,
-          transform: `rotateX(${mousePos.y * 0.3}deg) rotateY(${-mousePos.x * 0.3}deg)`,
+          transform: isPanning ? "none" : `rotateX(${mousePos.y * 0.3}deg) rotateY(${-mousePos.x * 0.3}deg)`,
           transformOrigin: "center center",
-          boxShadow: `${-mousePos.x * 2}px ${-mousePos.y * 2}px 20px rgba(107,55,16,0.12)`,
+          boxShadow: isPanning ? "0 4px 20px rgba(107,55,16,0.12)" : `${-mousePos.x * 2}px ${-mousePos.y * 2}px 20px rgba(107,55,16,0.12)`,
           transition: "transform 0.15s ease-out, box-shadow 0.15s ease-out",
-          cursor: zoom > 1 ? (isPanning ? "grabbing" : "grab") : "default",
+          cursor: "none",
         }}
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}

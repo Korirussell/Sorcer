@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Nanum_Pen_Script, Caveat, DM_Sans, Victor_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -86,15 +87,17 @@ export default function RootLayout({
             disableTransitionOnChange
             enableSystem={false}
           >
-            <LayoutClient>
-              <Toaster
-                position="top-center"
-                toastOptions={{
-                  className: "!bg-parchment-dark !text-oak !border-oak/20 !font-sans !shadow-specimen",
-                }}
-              />
-              {children}
-            </LayoutClient>
+            <Suspense fallback={<div className="min-h-screen bg-parchment" />}>
+              <LayoutClient>
+                <Toaster
+                  position="top-center"
+                  toastOptions={{
+                    className: "!bg-parchment-dark !text-oak !border-oak/20 !font-sans !shadow-specimen",
+                  }}
+                />
+                {children}
+              </LayoutClient>
+            </Suspense>
           </ThemeProvider>
         </EnergyProvider>
       </body>

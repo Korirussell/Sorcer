@@ -8,7 +8,7 @@ import { getChat, getMessages, type ChatRecord, type StoredMessage } from "@/lib
 import { PromptCacheViz } from "@/components/PromptCacheViz";
 import { CompressionViz } from "@/components/CompressionViz";
 import { MessageTimeline } from "@/components/MessageTimeline";
-import { RoutingViz } from "@/components/RoutingViz";
+import { RouteMapViz } from "@/components/RouteMapViz";
 
 function AnimatedCounter({ value, suffix = "", decimals = 2, className = "" }: { value: number; suffix?: string; decimals?: number; className?: string }) {
   const [display, setDisplay] = useState(0);
@@ -297,7 +297,7 @@ export default function BreakdownPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.7 }}
         >
-          <RoutingViz
+          <RouteMapViz
             model={stats.primaryModel}
             region={stats.primaryRegion}
             cfePercent={stats.primaryCfe}

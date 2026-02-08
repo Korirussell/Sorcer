@@ -211,10 +211,10 @@ export function SorcerSidebar({ isOpen, onClose, onCollapse }: SidebarProps) {
         <p className="text-[10px] text-oak/30 uppercase tracking-wider px-1 mb-2">Recent Chats</p>
         <div className="space-y-1.5">
           {chatHistory.map((chat) => (
-            <button
+            <div
               key={chat.id}
               onClick={() => { router.push(`/chat/${chat.id}`); onClose(); }}
-              className="w-full text-left p-3 rounded-xl bg-parchment/60 border border-oak/8 hover:border-oak/15 hover:shadow-sm transition-all duration-200 group"
+              className="w-full text-left p-3 rounded-xl bg-parchment/60 border border-oak/8 hover:border-oak/15 hover:shadow-sm transition-all duration-200 group cursor-pointer"
             >
               <div className="flex items-start gap-2.5">
                 <div className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${chat.carbonSaved > 0 ? "bg-moss" : "bg-topaz"}`} />
@@ -251,7 +251,7 @@ export function SorcerSidebar({ isOpen, onClose, onCollapse }: SidebarProps) {
                   </div>
                 </div>
               </div>
-            </button>
+            </div>
           ))}
 
           <button

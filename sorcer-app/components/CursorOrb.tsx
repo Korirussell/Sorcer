@@ -49,21 +49,21 @@ function CursorOrbInner() {
       const pmy = prevMouseRef.current.y;
       const speed = Math.sqrt((mx - pmx) ** 2 + (my - pmy) ** 2);
 
-      // Spawn ember particles — visible trail
-      const spawnCount = Math.min(Math.floor(speed * 0.3) + 1, 4);
-      if (mx > 0 && my > 0) {
+      // Spawn ember particles — only when moving
+      const spawnCount = Math.min(Math.floor(speed * 0.35), 5);
+      if (mx > 0 && my > 0 && speed > 1.5) {
         for (let i = 0; i < spawnCount; i++) {
           const t = i / Math.max(spawnCount, 1);
           const sx = pmx + (mx - pmx) * t;
           const sy = pmy + (my - pmy) * t;
           embersRef.current.push({
-            x: sx + (Math.random() - 0.5) * 8,
-            y: sy + (Math.random() - 0.5) * 8,
-            vx: (Math.random() - 0.5) * 1.2,
-            vy: -0.8 - Math.random() * 1.0,
+            x: sx + (Math.random() - 0.5) * 4,
+            y: sy + (Math.random() - 0.5) * 4,
+            vx: (Math.random() - 0.5) * 0.6,
+            vy: -0.4 - Math.random() * 0.5,
             life: 0,
-            maxLife: 25 + Math.random() * 20,
-            size: 1.0 + Math.random() * 2.0,
+            maxLife: 30 + Math.random() * 20,
+            size: 0.5 + Math.random() * 1.0,
             hue: 200 + Math.random() * 40,
           });
         }
@@ -109,7 +109,7 @@ function CursorOrbInner() {
 
       // Main orb — clearly visible as the cursor replacement
       if (mx > 0 && my > 0) {
-        const pulse = Math.sin(frame * 0.08) * 0.12 + 1;
+        const pulse = Math.sin(frame * 0.04) * 0.10 + 1;
         const orbSize = 12 * pulse;
 
         // Wide outer aura
@@ -134,13 +134,13 @@ function CursorOrbInner() {
         ctx.fill();
 
         // Bright white-hot core (the actual cursor point)
-        ctx.fillStyle = `hsla(210, 60%, 97%, ${0.7 + Math.sin(frame * 0.15) * 0.15})`;
+        ctx.fillStyle = `hsla(210, 60%, 97%, ${0.7 + Math.sin(frame * 0.06) * 0.12})`;
         ctx.beginPath();
         ctx.arc(mx, my, 3, 0, Math.PI * 2);
         ctx.fill();
 
         // Secondary ring pulse
-        const ringAlpha = 0.08 + Math.sin(frame * 0.06) * 0.04;
+        const ringAlpha = 0.08 + Math.sin(frame * 0.03) * 0.04;
         ctx.strokeStyle = `hsla(215, 70%, 70%, ${ringAlpha})`;
         ctx.lineWidth = 0.8;
         ctx.beginPath();

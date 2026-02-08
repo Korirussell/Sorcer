@@ -4,14 +4,27 @@ import { useEffect, useState } from "react";
 import { Leaf, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEnergy } from "@/context/EnergyContext";
+import { getAggregateStats } from "@/lib/localChatStore";
 
-const GRID_REGIONS = [
-  { region: "Pacific NW", status: "clean" as const, gCO2: 142 },
-  { region: "Midwest", status: "medium" as const, gCO2: 312 },
-  { region: "Southeast", status: "clean" as const, gCO2: 198 },
-  { region: "Northeast", status: "medium" as const, gCO2: 285 },
-  { region: "Southwest", status: "dirty" as const, gCO2: 478 },
+interface GridRegion {
+  region: string;
+  status: "clean" | "medium" | "dirty";
+  gCO2: number;
+}
+
+const FALLBACK_REGIONS: GridRegion[] = [
+  { region: "Pacific NW", status: "clean", gCO2: 142 },
+  { region: "Midwest", status: "medium", gCO2: 312 },
+  { region: "Southeast", status: "clean", gCO2: 198 },
+  { region: "Northeast", status: "medium", gCO2: 285 },
+  { region: "Southwest", status: "dirty", gCO2: 478 },
 ];
+
+function scoreToStatus(score: number): "clean" | "medium" | "dirty" {
+  if (score >= 70) return "clean";
+  if (score >= 40) return "medium";
+  return "dirty";
+}
 
 function statusColor(status: "clean" | "medium" | "dirty") {
   return status === "clean" ? "#4B6A4C" : status === "dirty" ? "#B52121" : "#DDA059";
@@ -19,18 +32,57 @@ function statusColor(status: "clean" | "medium" | "dirty") {
 
 export function CarbonIndicator() {
   const { isAutoMode } = useEnergy();
-  const [carbonSaved, setCarbonSaved] = useState(127.5);
+  const [carbonSaved, setCarbonSaved] = useState(0);
   const [tick, setTick] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [gridRegions, setGridRegions] = useState<GridRegion[]>(FALLBACK_REGIONS);
 
+  // Load real aggregate stats from localStorage
+  useEffect(() => {
+    const stats = getAggregateStats();
+    setCarbonSaved(stats.totalCarbonSaved_g / 1000); // convert g to kg
+  }, []);
+
+  // Try to fetch live grid data from backend
+  useEffect(() => {
+    const url = `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/grid/map`;
+    fetch(url)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data?.regions) return;
+        const ZONE_LABELS: Record<string, string> = {
+          "US-CAL-CISO": "Pacific NW",
+          "US-MIDW-MISO": "Midwest",
+          "US-SE-SOCO": "Southeast",
+          "US-NY-NYIS": "Northeast",
+          "US-TEX-ERCO": "Southwest",
+        };
+        const live: GridRegion[] = data.regions
+          .filter((r: any) => ZONE_LABELS[r.zone])
+          .map((r: any) => ({
+            region: ZONE_LABELS[r.zone],
+            status: scoreToStatus(r.score),
+            gCO2: Math.round(r.carbon_intensity_g_per_kwh ?? r.score * 5),
+          }));
+        if (live.length > 0) setGridRegions(live);
+      })
+      .catch(() => { /* keep fallback */ });
+  }, []);
+
+  // Periodically refresh stats from localStorage
   useEffect(() => {
     const interval = setInterval(() => {
-      if (Math.random() > 0.7) {
-        setCarbonSaved((prev) => prev + Math.random() * 0.1);
-        setTick(true);
-        setTimeout(() => setTick(false), 800);
-      }
-    }, 5000);
+      const stats = getAggregateStats();
+      const newVal = stats.totalCarbonSaved_g / 1000;
+      setCarbonSaved((prev) => {
+        if (Math.abs(newVal - prev) > 0.001) {
+          setTick(true);
+          setTimeout(() => setTick(false), 800);
+          return newVal;
+        }
+        return prev;
+      });
+    }, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -75,7 +127,7 @@ export function CarbonIndicator() {
             <div className="glass-panel rounded-2xl px-4 py-3 shadow-specimen">
               <p className="text-[10px] text-oak/40 uppercase tracking-wider mb-2.5">Live Grid Status</p>
               <div className="space-y-2">
-                {GRID_REGIONS.map((grid) => (
+                {gridRegions.map((grid) => (
                   <div key={grid.region} className="flex items-center gap-2.5">
                     <span
                       className="w-2.5 h-2.5 rounded-full shrink-0"

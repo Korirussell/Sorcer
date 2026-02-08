@@ -6,6 +6,7 @@ import { Zap, Leaf, Flame, Bot, UserIcon } from "lucide-react";
 import type { StoredMessage } from "@/lib/localChatStore";
 
 const MODEL_ICONS: Record<string, { icon: typeof Leaf; color: string; label: string }> = {
+  "google/gemini-2.0-flash": { icon: Leaf, color: "text-moss", label: "Eco Flash" },
   "google/gemini-2.5-flash-lite": { icon: Leaf, color: "text-moss", label: "Eco" },
   "anthropic/claude-haiku-4.5": { icon: Zap, color: "text-topaz", label: "Balanced" },
   "openai/gpt-5.2": { icon: Flame, color: "text-witchberry", label: "Power" },

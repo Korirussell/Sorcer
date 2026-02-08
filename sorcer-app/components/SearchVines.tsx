@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 
 // Ink-vine SVG paths that curl around the search bar like botanical illustrations
@@ -35,12 +35,14 @@ interface SearchVinesProps {
 export function SearchVines({ isFocused, children }: SearchVinesProps) {
   const [hasAnimated, setHasAnimated] = useState(false);
 
-  // Trigger animation on first focus or on mount
-  const shouldAnimate = isFocused || hasAnimated;
+  // Trigger animation on first focus
+  useEffect(() => {
+    if (isFocused && !hasAnimated) {
+      setHasAnimated(true);
+    }
+  }, [isFocused, hasAnimated]);
 
-  if (isFocused && !hasAnimated) {
-    setHasAnimated(true);
-  }
+  const shouldAnimate = isFocused || hasAnimated;
 
   return (
     <div className="relative w-full">

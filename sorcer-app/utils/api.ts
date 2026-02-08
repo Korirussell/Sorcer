@@ -30,6 +30,8 @@ export interface OrchestrateRequest {
   user_id: string;
   project_id: string;
   is_urgent?: boolean;
+  bypass_eco?: boolean;
+  deadline?: string;
 }
 
 export interface OrchestrateResponse {
@@ -38,10 +40,9 @@ export interface OrchestrateResponse {
   response: string;
   receipt_id: string;
   deferred: boolean;
-  eco_stats?: {
-    tokens_saved: number;
-    reduction: string;
-  };
+  task_id?: string;
+  message?: string;
+  eco_stats?: Record<string, unknown>;
 }
 
 export interface Receipt {
