@@ -7,6 +7,7 @@ from core.logger import GreenLogger
 from core.cache import check_if_prompt_is_in_cache, add_prompt_to_cache
 from core.database import EcoDatabase
 from core.receipt_store import set_receipt as store_receipt
+from loguru import logger
 from core.grid_engine import get_default_grid_data
 
 
@@ -51,6 +52,9 @@ class EcoOrchestrator:
         grid_data = get_default_grid_data()
         grid_intensity = grid_data["carbon_intensity_g_per_kwh"]
         grid_source = grid_data["grid_source"]
+        grid_zone = grid_data.get("zone", "unknown")
+        grid_source_label = grid_data.get("_source", "?")
+        logger.info(f"Orchestrator grid | zone={grid_zone} | intensity={grid_intensity} g/kWh | source={grid_source_label} | defer_threshold=200")
         GRID_THRESHOLD = 200
         deadline = getattr(req, "deadline", None) or (datetime.utcnow() + timedelta(hours=24))
         if not getattr(req, "is_urgent", False) and grid_intensity > GRID_THRESHOLD:

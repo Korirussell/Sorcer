@@ -60,7 +60,13 @@ class RedisCache:
                 logger.info(f"✓ Redis connected ({host}:{port})")
             except Exception as e:
                 self.redis_client = None
-                logger.warning(f"Redis disabled (no-op mode): {e}")
+                err_str = str(e).lower()
+                hint = ""
+                if "10061" in err_str or "connection refused" in err_str or "actively refused" in err_str:
+                    hint = " Redis server not running. Start Redis (e.g. docker run -p 6379:6379 redis) or set REDIS_HOST/REDIS_PORT for remote."
+                elif "redis" in err_str and "import" not in err_str:
+                    hint = " Ensure Redis server is running at the configured host:port."
+                logger.warning(f"Redis disabled (no-op mode): {e}.{hint}")
         else:
             logger.info("✓ Redis cache disabled (no-op mode, redis not installed)")
     

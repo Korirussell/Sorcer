@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
+from loguru import logger
 from core.redis import RedisCache
 from core.energy_providers import (
     fetch_region_snapshot,
@@ -64,13 +65,19 @@ def _is_cache_fresh(data: dict) -> bool:
 
 def _cache_get(key: str) -> dict | None:
     """Try Redis first, then memory. Returns data only if fresh (within threshold)."""
-    data = _redis.get(f"{GRID_KEY_PREFIX}{key}")
+    redis_key = f"{GRID_KEY_PREFIX}{key}"
+    data = _redis.get(redis_key)
+    source = "redis"
     if data is None:
         data = _memory_cache.get(key)
+        source = "memory"
     if data is not None and _is_cache_fresh(data):
         if isinstance(data, dict):
             data["_from_cache"] = True
+        logger.info(f"Grid cache HIT | key={key} | source={source} | fetched_at={data.get('fetched_at', '?')}")
         return data
+    if data is not None:
+        logger.info(f"Grid cache STALE | key={key} | fetched_at={data.get('fetched_at', '?')} | re-fetching")
     return None
 
 
@@ -97,10 +104,13 @@ def get_region_data(em_zone: str, wt_region: str) -> dict:
     if cached is not None:
         return cached
 
+    logger.info(f"Grid API fetch | em_zone={em_zone} | wt_region={wt_region}")
     snapshot = fetch_region_snapshot(em_zone, wt_region)
     if "fetched_at" not in snapshot:
         snapshot["fetched_at"] = _now_iso()
     _cache_set(em_zone, snapshot)
+    intensity = snapshot.get("carbon_intensity_g_per_kwh")
+    logger.info(f"Grid API done | zone={em_zone} | carbon_intensity={intensity} | from_cache=False")
     return snapshot
 
 
@@ -112,9 +122,9 @@ def get_multi_region_data(regions: list[dict[str, str]]) -> list[dict]:
     return [get_region_data(r["em_zone"], r["wt_region"]) for r in regions]
 
 
-# Default region for orchestrator when user location is unknown (env override)
-DEFAULT_EM_ZONE = os.getenv("DEFAULT_GRID_EM_ZONE", "US-CAL-CISO")
-DEFAULT_WT_REGION = os.getenv("DEFAULT_GRID_WT_REGION", "CAISO_NORTH")
+# Default region: Atlanta, Georgia (SOCO / Southern Company grid). Env override supported.
+DEFAULT_EM_ZONE = os.getenv("DEFAULT_GRID_EM_ZONE", "US-SE-SOCO")
+DEFAULT_WT_REGION = os.getenv("DEFAULT_GRID_WT_REGION", "SOCO")
 
 
 def get_grid_carbon(em_zone: str, wt_region: str) -> dict:
@@ -140,11 +150,19 @@ def get_default_grid_data() -> dict:
     Returns grid data for the default region (used by orchestrator when no user location).
     carbon_intensity_g_per_kwh: for logger and deferral threshold.
     grid_source: power mix for receipts (e.g. wind/solar/gas %).
+    _source: where data came from (electricity_maps | watttime | fallback).
     """
+    logger.info(f"Grid default region | em_zone={DEFAULT_EM_ZONE} | wt_region={DEFAULT_WT_REGION} (no user location)")
     carbon = get_grid_carbon(DEFAULT_EM_ZONE, DEFAULT_WT_REGION)
     intensity = carbon.get("carbon_intensity_g_per_kwh")
-    if intensity is None:
+    zone = carbon.get("zone", DEFAULT_EM_ZONE)
+
+    if intensity is not None:
+        logger.info(f"Grid BEST region (API) | zone={zone} | carbon_intensity={intensity} g/kWh | source=api")
+    else:
         intensity = 100.0  # fallback when APIs fail
+        logger.warning(f"Grid API FAILED | no carbon data from WattTime/Electricity Maps | using FALLBACK intensity={intensity} g/kWh | Set WATTTIME_USERNAME/WATTTIME_PASSWORD or ELECTRICITYMAPS_TOKEN")
+
     # Build grid_source from production/consumption breakdown or use defaults
     prod = carbon.get("production_breakdown") or carbon.get("consumption_breakdown")
     if prod and isinstance(prod, dict):
@@ -156,12 +174,16 @@ def get_default_grid_data() -> dict:
             "gas": prod.get("gas", 0) or 0,
             "coal": prod.get("coal", 0) or 0,
         }
+        source_label = "electricity_maps"
     else:
         grid_source = {"wind": 60, "solar": 22, "gas": 18}
+        source_label = "fallback"
+
     return {
         "carbon_intensity_g_per_kwh": intensity,
-        "zone": carbon.get("zone", DEFAULT_EM_ZONE),
+        "zone": zone,
         "grid_source": grid_source,
+        "_source": source_label,
     }
 
 

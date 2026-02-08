@@ -7,6 +7,7 @@ Shows what we do to the prompt and the final answer.
 
 With real LLM: set Vertex AI (GOOGLE_APPLICATION_CREDENTIALS, GOOGLE_CLOUD_PROJECT) or GOOGLE_API_KEY in .env.
 With mock LLM (no key/quota needed): set TEST_FLOW_MOCK_LLM=1 in env or .env.
+Verbose mode: set TEST_FLOW_VERBOSE=1 for pre-check + extra logs.
 No Redis or Postgres required.
 """
 import asyncio
@@ -20,6 +21,8 @@ sys.path.insert(0, str(_root))
 
 from dotenv import load_dotenv
 load_dotenv(_root / ".env")
+
+VERBOSE = os.getenv("TEST_FLOW_VERBOSE", "").strip() in ("1", "true", "yes")
 
 # Minimal request object for orchestrator
 class Req:
@@ -36,7 +39,54 @@ class Req:
         self.project_id = project_id
 
 
+def _run_precheck():
+    """Print environment status: Redis, WattTime, Electricity Maps."""
+    print("\n" + "=" * 60)
+    print("PRE-CHECK (env / services)")
+    print("=" * 60)
+
+    # Redis
+    try:
+        from core.redis import RedisCache
+        r = RedisCache(host=os.getenv("REDIS_HOST", "localhost"), port=int(os.getenv("REDIS_PORT", 6379)))
+        if r.redis_client:
+            print("  Redis: CONNECTED (cache enabled)")
+        else:
+            print("  Redis: NOT RUNNING (no-op mode). Start: docker run -p 6379:6379 redis")
+    except Exception as e:
+        print(f"  Redis: ERROR - {e}")
+
+    # WattTime
+    from core.energy_providers import get_watttime_token
+    wt = get_watttime_token()
+    if wt:
+        print("  WattTime: CONFIGURED (token available)")
+    else:
+        print("  WattTime: NOT CONFIGURED (set WATTTIME_TOKEN or WATTTIME_USERNAME/WATTTIME_PASSWORD)")
+
+    # Electricity Maps
+    em_token = os.getenv("ELECTRICITYMAPS_TOKEN")
+    if em_token:
+        print("  Electricity Maps: CONFIGURED (token available)")
+    else:
+        print("  Electricity Maps: NOT CONFIGURED (set ELECTRICITYMAPS_TOKEN)")
+
+    # Default grid region (Atlanta, GA area)
+    em_zone = os.getenv("DEFAULT_GRID_EM_ZONE", "US-SE-SOCO")
+    wt_region = os.getenv("DEFAULT_GRID_WT_REGION", "SOCO")
+    print(f"  Default grid region: em_zone={em_zone} | wt_region={wt_region} (Atlanta, GA)")
+    print("=" * 60 + "\n")
+
+
 async def main():
+    if VERBOSE:
+        import logging
+        logging.basicConfig(level=logging.INFO)
+        from loguru import logger
+        logger.remove()
+        logger.add(sys.stderr, level="INFO")
+        _run_precheck()
+
     from core.compression import EcoCompressor
     from core.classifier import ComplexityScorer
     from core.orchestrator import EcoOrchestrator
@@ -81,6 +131,11 @@ async def main():
     print(f"   response (LLM answer): {result.get('response', '')!r}")
     print(f"   receipt_id: {result.get('receipt_id', 'N/A')}")
     print(f"   eco_stats: {result.get('eco_stats', {})}")
+    if VERBOSE:
+        eco = result.get("eco_stats", {})
+        print(f"\n6. GRID CONTEXT (from flow):")
+        print(f"   Grid intensity used for CO2 calc: ~{eco.get('actual_co2', '?')} g CO2 (from eco_stats)")
+        print(f"   Best region: default ({os.getenv('DEFAULT_GRID_EM_ZONE', 'US-SE-SOCO')} / Atlanta, GA) - see logs above for API/fallback")
     print("=" * 60)
     print("Flow completed successfully.")
     return result

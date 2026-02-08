@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import requests
+from loguru import logger
 from requests.auth import HTTPBasicAuth
 
 # Base URL
@@ -366,17 +367,31 @@ def fetch_region_snapshot(em_zone: str, wt_region: str) -> dict:
     the combined Redis-ready snapshot. Falls back to WattTime-only when EM fails.
     """
     wt_token = _get_watttime_token()
+    if not wt_token:
+        logger.warning("Energy API | WattTime: NOT CONFIGURED (set WATTTIME_TOKEN or WATTTIME_USERNAME/WATTTIME_PASSWORD)")
 
     em_ci = fetch_emaps_latest(em_zone)
     em_pb = fetch_emaps_power_breakdown(em_zone)
+    em_ok = em_ci is not None
+    if not em_ok:
+        logger.warning("Energy API | Electricity Maps: FAILED or NOT CONFIGURED (set ELECTRICITYMAPS_TOKEN)")
+    else:
+        logger.info(f"Energy API | Electricity Maps: OK | zone={em_zone} | carbon_intensity={em_ci.get('carbon_intensity_g_per_kwh')}")
+
     wt_idx = fetch_watttime_index(wt_region, wt_token)
     wt_fc = fetch_watttime_forecast(wt_region, wt_token)
+    wt_ok = wt_idx is not None or wt_fc is not None
+    if not wt_ok:
+        logger.warning("Energy API | WattTime: FAILED or no data for region")
+    else:
+        logger.info(f"Energy API | WattTime: OK | region={wt_region} | percentile={wt_idx.get('percentile') if wt_idx else '?'} | moer={wt_fc.get('moer_lbs_per_mwh') if wt_fc else '?'}")
 
     snapshot = build_region_snapshot(em_ci, em_pb, wt_idx, wt_fc)
     # If EM returned no carbon_intensity but we have WattTime, use WattTime-only fallback
     if snapshot.get("carbon_intensity_g_per_kwh") is None and snapshot.get("watttime_percentile") is None:
         fallback = _watttime_only_snapshot(wt_region)
         if fallback:
+            logger.info(f"Energy API | Using WattTime-only fallback for {wt_region}")
             return fallback
     return snapshot
 
