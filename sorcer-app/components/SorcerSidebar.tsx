@@ -100,6 +100,7 @@ export function SorcerSidebar({ isOpen, onClose, onCollapse }: SidebarProps) {
     { id: "map", label: "Realm Map", icon: Globe, href: "/map", badge: 0 },
     { id: "profile", label: "Your Profile", icon: User, href: "/profile", badge: 0 },
     { id: "scheduler", label: "Task Scroll", icon: Clock, href: "/scheduler", badge: PENDING_TASKS },
+    { id: "projects", label: "Agentic Lab", icon: FlaskConical, href: "/projects", badge: 0 },
   ];
 
   // Determine active nav from current route
@@ -109,6 +110,7 @@ export function SorcerSidebar({ isOpen, onClose, onCollapse }: SidebarProps) {
     "/map": "map",
     "/profile": "profile",
     "/scheduler": "scheduler",
+    "/projects": "projects",
   };
   const activeNav = routeMap[pathname] || "history";
 
