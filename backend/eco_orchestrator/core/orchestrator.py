@@ -41,11 +41,14 @@ class EcoOrchestrator:
         if cached is not None:
             # Still run compression to report token stats even on cache hits
             comp_cached = self.compressor.compress(req.prompt)
+            cache_type = cached.pop("_cache_type", "hash")  # injected by cache layer
             return {
                 "status": "complete",
                 "response": cached.get("response", ""),
                 "receipt_id": cached.get("receipt_id"),
                 "eco_stats": {**(cached.get("eco_stats") or {}), "was_cached": True},
+                "was_cached": True,
+                "cache_type": cache_type,
                 "input_tokens": comp_cached["original_count"],
                 "compressed_text_tokens": comp_cached["final_count"],
                 "compressed_prompt": comp_cached["compressed_text"],

@@ -133,12 +133,23 @@ def add_semantic_cache(prompt: str, output: Any) -> bool:
 
 
 def check_if_prompt_is_in_cache(prompt: str, semantic_fallback: bool = True) -> Optional[Any]:
-    """Check exact (hash) cache first, then semantic cache if enabled."""
+    """Check exact (hash) cache first, then semantic cache if enabled.
+
+    When a hit is found and the value is a dict, a ``_cache_type`` key is
+    injected (``"hash"`` or ``"semantic"``) so callers can distinguish
+    which layer served the result.
+    """
     out = check_hash_cache(prompt)
     if out is not None:
+        if isinstance(out, dict):
+            out["_cache_type"] = "hash"
         return out
     if semantic_fallback:
-        return check_semantic_cache(prompt)
+        out = check_semantic_cache(prompt)
+        if out is not None:
+            if isinstance(out, dict):
+                out["_cache_type"] = "semantic"
+            return out
     return None
 
 
