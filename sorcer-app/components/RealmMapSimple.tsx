@@ -237,7 +237,7 @@ function MapTooltip({ data }: { data: TooltipData }) {
   const tierColor = tier === "clean" ? "text-moss" : tier === "dirty" ? "text-witchberry" : "text-topaz";
 
   return (
-    <div className="fixed z-50 pointer-events-none" style={{ left: data.x + 16, top: data.y - 20 }}>
+    <div className="fixed z-50 pointer-events-none" style={{ left: data.x, top: data.y - 12, transform: "translate(-50%, -100%)" }}>
       <div className="bg-parchment border border-oak/20 rounded-lg px-4 py-3 shadow-lg max-w-[220px]">
         <h4 className="font-header text-base text-oak leading-tight">{data.dc.name}</h4>
         <p className="text-[11px] font-sub text-oak-light/60 mt-0.5">{data.dc.provider}</p>
@@ -350,6 +350,51 @@ function RealmMapInner() {
   const [particles, setParticles] = useState<Particle[]>([]);
   const particleIdRef = useRef(0);
   const lastParticleTime = useRef(0);
+  const [liveDCs, setLiveDCs] = useState<DataCenter[]>(DATA_CENTERS);
+
+  // Try to fetch live grid scores from backend, merge with static DC data
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await fetch(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/grid/map`
+        );
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (cancelled || !data?.regions) return;
+        // Build a zone→score lookup from backend
+        const scoreMap = new Map<string, number>();
+        for (const r of data.regions) {
+          if (r.zone && typeof r.score === "number") scoreMap.set(r.zone, r.score);
+          if (r.name && typeof r.score === "number") scoreMap.set(r.name, r.score);
+        }
+        // Merge: update static DCs with live scores where zone matches
+        const ZONE_MAP: Record<string, string> = {
+          "The Dalles": "US-CAL-CISO",
+          "Hillsboro": "US-CAL-CISO",
+          "Council Bluffs": "US-MIDW-MISO",
+          "Chicago": "US-MIDW-MISO",
+          "Ashburn": "US-NY-NYIS",
+          "Dallas": "US-TEX-ERCO",
+          "Phoenix": "US-TEX-ERCO",
+          "San Jose": "US-CAL-CISO",
+          "Quincy": "US-CAL-CISO",
+          "Mayes County": "US-SE-SOCO",
+        };
+        setLiveDCs(DATA_CENTERS.map((dc) => {
+          const zone = ZONE_MAP[dc.name];
+          if (zone && scoreMap.has(zone)) {
+            return { ...dc, score: scoreMap.get(zone)! };
+          }
+          return dc;
+        }));
+      } catch {
+        // Backend offline — keep static data
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Zoom & Pan state
   const [zoom, setZoom] = useState(1);
@@ -422,12 +467,12 @@ function RealmMapInner() {
   // Pre-compute all DC positions once
   const dcPositions = useMemo(() => {
     const map = new Map<string, [number, number]>();
-    for (const dc of DATA_CENTERS) {
+    for (const dc of liveDCs) {
       const pt = project(dc.lng, dc.lat);
       if (pt) map.set(dc.name, pt);
     }
     return map;
-  }, [project]);
+  }, [project, liveDCs]);
 
   // Pre-compute city positions
   const cityPositions = useMemo(() => {
@@ -613,7 +658,7 @@ function RealmMapInner() {
 
           {/* ── Data Center Markers (STATIC — no parallax for clickability) ── */}
           <g>
-            {DATA_CENTERS.map((dc) => {
+            {liveDCs.map((dc) => {
               const pt = dcPositions.get(dc.name);
               if (!pt) return null;
               const [x, y] = pt;

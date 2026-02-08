@@ -13,6 +13,8 @@ import {
   X as XIcon,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
+import { getAggregateStats, getAllChats, getMessages, type AggregateStats } from "@/lib/localChatStore";
+import { getBudgetStatus } from "@/utils/api";
 
 // ─── Animated Counter ────────────────────────────────────────────────────────
 function AnimatedNumber({ value, decimals = 1, duration = 1200 }: { value: number; decimals?: number; duration?: number }) {
@@ -33,16 +35,62 @@ function AnimatedNumber({ value, decimals = 1, duration = 1200 }: { value: numbe
   return <>{display.toFixed(decimals)}</>;
 }
 
-// ─── Mock Data ───────────────────────────────────────────────────────────────
-const CARBON_STATS = {
-  totalSaved: 127.5,
-  promptsRouted: 342,
-  ecoPercent: 78,
-  treesEquiv: 5.2,
-  avgPerPrompt: 0.37,
-  bestDay: { date: "2026-01-23", saved: 8.4 },
-};
+// ─── Build live stats from localStorage ──────────────────────────────────────
 
+function buildLiveStats() {
+  const stats = getAggregateStats();
+  const totalSavedKg = stats.totalCarbonSaved_g / 1000;
+  const treesEquiv = Math.round(totalSavedKg / 21 * 10) / 10; // ~21kg CO2 per tree/year
+  return {
+    totalSaved: totalSavedKg,
+    promptsRouted: stats.totalPrompts,
+    ecoPercent: Math.round(stats.avgReduction),
+    treesEquiv: Math.max(treesEquiv, 0),
+    avgPerPrompt: stats.totalPrompts > 0 ? totalSavedKg / stats.totalPrompts : 0,
+  };
+}
+
+function buildReceiptsFromChats(): ReceiptData[] {
+  const chats = getAllChats();
+  const receipts: ReceiptData[] = [];
+  for (const chat of chats) {
+    const msgs = getMessages(chat.id);
+    for (const m of msgs) {
+      if (m.role !== "assistant" || !m.carbon) continue;
+      const c = m.carbon;
+      const eco = c.saved_g > 0;
+      const modelLabel = (c.model || "unknown").split("/").pop() || c.model;
+      // Build energy breakdown from region
+      const regionBreakdowns: Record<string, { source: string; pct: number; color: string }[]> = {
+        "us-central1": [{ source: "Wind", pct: 65, color: "#6B9E6F" }, { source: "Solar", pct: 25, color: "#DDA059" }, { source: "Gas", pct: 10, color: "#A08060" }],
+        "us-west1": [{ source: "Hydro", pct: 55, color: "#4a8ab5" }, { source: "Wind", pct: 30, color: "#6B9E6F" }, { source: "Gas", pct: 15, color: "#A08060" }],
+        "europe-west1": [{ source: "Nuclear", pct: 40, color: "#9B7EC8" }, { source: "Wind", pct: 35, color: "#6B9E6F" }, { source: "Gas", pct: 25, color: "#A08060" }],
+      };
+      const breakdown = regionBreakdowns[c.region] || [{ source: "Mixed", pct: 100, color: "#A08060" }];
+      const timeDiff = Date.now() - new Date(m.createdAt).getTime();
+      const hoursAgo = Math.floor(timeDiff / 3600000);
+      const timestamp = hoursAgo < 1 ? "just now" : hoursAgo < 24 ? `${hoursAgo}h ago` : `${Math.floor(hoursAgo / 24)}d ago`;
+
+      receipts.push({
+        id: m.id,
+        prompt: msgs.find((x) => x.role === "user" && new Date(x.createdAt) < new Date(m.createdAt))?.content.slice(0, 80) || "Prompt",
+        model: modelLabel,
+        region: c.region || "auto",
+        carbonCost: c.cost_g / 1000,
+        carbonSaved: c.saved_g / 1000,
+        timestamp,
+        eco,
+        energyBreakdown: breakdown,
+        baselineCost: c.baseline_g / 1000,
+        tokens: c.tokens_in + c.tokens_out,
+        latency: `${(c.latency_ms / 1000).toFixed(1)}s`,
+      });
+    }
+  }
+  return receipts.slice(0, 10); // Show most recent 10
+}
+
+// Fallback weekly/monthly data (would come from backend analytics in production)
 const WEEKLY_DATA = [
   { day: "Mon", saved: 2.1, cost: 0.8 },
   { day: "Tue", saved: 3.4, cost: 1.2 },
@@ -84,10 +132,10 @@ const RECEIPT_HISTORY: ReceiptData[] = [
   { id: "r006", prompt: "Explain quantum computing energy requirements", model: "GPT-5.2", region: "us-east4", carbonCost: 0.38, carbonSaved: 0.0, timestamp: "2d ago", eco: false, energyBreakdown: [{ source: "Gas", pct: 50, color: "#A08060" }, { source: "Coal", pct: 30, color: "#555" }, { source: "Nuclear", pct: 20, color: "#9B7EC8" }], baselineCost: 0.38, tokens: 2800, latency: "3.2s" },
 ];
 
-const BUDGET_STATUS = {
+const DEFAULT_BUDGET = {
   limit_g: 500,
-  used_g: 187.3,
-  remaining_percent: 62.5,
+  used_g: 0,
+  remaining_percent: 100,
   policy_active: true,
 };
 
@@ -135,7 +183,7 @@ function MonthlyTrend({ data }: { data: typeof MONTHLY_DATA }) {
 }
 
 // ─── Budget Gauge ────────────────────────────────────────────────────────────
-function BudgetGauge({ budget }: { budget: typeof BUDGET_STATUS }) {
+function BudgetGauge({ budget }: { budget: typeof DEFAULT_BUDGET }) {
   const usedPct = ((budget.used_g / budget.limit_g) * 100);
   const isLow = budget.remaining_percent < 25;
 
@@ -314,6 +362,28 @@ function ReceiptDetailModal({ receipt, onClose }: { receipt: ReceiptData; onClos
 
 export default function LedgerPage() {
   const [selectedReceipt, setSelectedReceipt] = useState<ReceiptData | null>(null);
+  const [liveStats, setLiveStats] = useState(buildLiveStats);
+  const [liveReceipts, setLiveReceipts] = useState<ReceiptData[]>([]);
+  const [budget, setBudget] = useState(DEFAULT_BUDGET);
+
+  useEffect(() => {
+    // Build live data from localStorage
+    setLiveStats(buildLiveStats());
+    setLiveReceipts(buildReceiptsFromChats());
+
+    // Try to fetch budget from backend
+    getBudgetStatus("sorcer-main")
+      .then((b) => setBudget({ limit_g: b.limit_g, used_g: b.used_g, remaining_percent: b.remaining_percent, policy_active: true }))
+      .catch(() => {
+        // Backend offline — compute budget from localStorage
+        const stats = getAggregateStats();
+        const used = stats.totalCarbonSaved_g > 0 ? stats.totalCarbonSaved_g * 0.3 : 0; // cost is ~30% of saved
+        setBudget({ limit_g: 500, used_g: Math.round(used * 10) / 10, remaining_percent: Math.round((1 - used / 500) * 100), policy_active: true });
+      });
+  }, []);
+
+  // Use live receipts if available, fall back to mock
+  const receipts = liveReceipts.length > 0 ? liveReceipts : RECEIPT_HISTORY;
 
   return (
     <div className="min-h-screen py-6 px-4 sm:px-8 max-w-4xl mx-auto">
@@ -331,12 +401,12 @@ export default function LedgerPage() {
             <p className="text-[10px] text-oak/40 uppercase tracking-wider mb-1">Total Carbon Diverted</p>
             <div className="flex items-baseline gap-2">
               <span className="text-5xl font-header text-moss leading-none tabular-nums">
-                <AnimatedNumber value={CARBON_STATS.totalSaved} />
+                <AnimatedNumber value={liveStats.totalSaved} decimals={2} />
               </span>
               <span className="text-lg text-oak-light/50">kg CO₂</span>
             </div>
             <p className="text-xs text-oak-light/50 mt-2">
-              Equivalent to <span className="text-moss font-medium">{CARBON_STATS.treesEquiv} trees</span> absorbing carbon for a year
+              Equivalent to <span className="text-moss font-medium">{liveStats.treesEquiv} trees</span> absorbing carbon for a year
             </p>
           </div>
 
@@ -345,21 +415,21 @@ export default function LedgerPage() {
               <div className="w-10 h-10 rounded-xl bg-moss/10 flex items-center justify-center mx-auto mb-1">
                 <Zap className="w-4 h-4 text-moss" />
               </div>
-              <span className="text-lg font-header text-oak">{CARBON_STATS.promptsRouted}</span>
+              <span className="text-lg font-header text-oak">{liveStats.promptsRouted}</span>
               <p className="text-[9px] text-oak/40">Prompts</p>
             </div>
             <div className="text-center">
               <div className="w-10 h-10 rounded-xl bg-topaz/10 flex items-center justify-center mx-auto mb-1">
                 <TrendingUp className="w-4 h-4 text-topaz" />
               </div>
-              <span className="text-lg font-header text-oak">{CARBON_STATS.ecoPercent}%</span>
-              <p className="text-[9px] text-oak/40">Eco Mode</p>
+              <span className="text-lg font-header text-oak">{liveStats.ecoPercent}%</span>
+              <p className="text-[9px] text-oak/40">Reduction</p>
             </div>
             <div className="text-center">
               <div className="w-10 h-10 rounded-xl bg-moss/10 flex items-center justify-center mx-auto mb-1">
                 <TreePine className="w-4 h-4 text-moss" />
               </div>
-              <span className="text-lg font-header text-moss">{CARBON_STATS.treesEquiv}</span>
+              <span className="text-lg font-header text-moss">{liveStats.treesEquiv}</span>
               <p className="text-[9px] text-oak/40">Trees</p>
             </div>
           </div>
@@ -411,7 +481,7 @@ export default function LedgerPage() {
           <h3 className="text-sm font-medium text-oak">Carbon Budget</h3>
           <span className="text-[10px] text-oak/30 ml-auto">project: sorcer-main</span>
         </div>
-        <BudgetGauge budget={BUDGET_STATUS} />
+        <BudgetGauge budget={budget} />
       </motion.div>
 
       {/* ── Receipt History ── */}
@@ -424,10 +494,10 @@ export default function LedgerPage() {
         <div className="flex items-center gap-2 px-5 py-4 border-b border-oak/8">
           <Receipt className="w-4 h-4 text-oak/40" />
           <h3 className="text-sm font-medium text-oak">Carbon Receipts</h3>
-          <span className="text-[10px] text-oak/30 ml-auto">{RECEIPT_HISTORY.length} recent</span>
+          <span className="text-[10px] text-oak/30 ml-auto">{receipts.length} recent</span>
         </div>
 
-        {RECEIPT_HISTORY.map((receipt) => (
+        {receipts.map((receipt) => (
           <button
             key={receipt.id}
             onClick={() => setSelectedReceipt(receipt)}

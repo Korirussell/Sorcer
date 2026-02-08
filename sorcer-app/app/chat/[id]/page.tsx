@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Bot, UserIcon, Leaf, Zap, Flame, Copy, Check, FlaskConical } from "lucide-react";
 import { SpellBar } from "@/components/SpellBar";
 import { useEnergy } from "@/context/EnergyContext";
+import { postOrchestrate, getHealth, getReceipt, type OrchestrateResponse } from "@/utils/api";
 import {
   getChat,
   getMessages,
@@ -106,7 +107,7 @@ function pickDummyResponse(prompt: string): string {
 
 function makeDummyCarbonMeta(): CarbonMeta {
   const regions = ["us-central1", "us-west1", "europe-west1"];
-  const models = ["google/gemini-2.5-flash-lite", "anthropic/claude-haiku-4.5", "openai/gpt-5.2"];
+  const models = ["google/gemini-2.0-flash", "anthropic/claude-haiku-4.5", "openai/gpt-5.2"];
   const region = regions[Math.floor(Math.random() * regions.length)];
   const model = models[Math.floor(Math.random() * models.length)];
   const cfeMap: Record<string, number> = { "us-central1": 89, "us-west1": 92, "europe-west1": 82 };
@@ -131,9 +132,96 @@ function makeDummyCarbonMeta(): CarbonMeta {
   };
 }
 
+// ─── Backend integration ────────────────────────────────────────────────────
+
+/** Map backend eco_stats + receipt to frontend CarbonMeta */
+function mapBackendToCarbonMeta(
+  ecoStats: Record<string, unknown>,
+  receipt: Record<string, unknown> | null,
+  prompt: string,
+  response: string,
+): CarbonMeta {
+  const baselineCo2 = Number(ecoStats.baseline_co2 ?? receipt?.baseline_co2_est ?? 0.5);
+  const actualCo2 = Number(ecoStats.actual_co2 ?? receipt?.actual_co2 ?? 0.1);
+  const savedCo2 = Number(ecoStats.co2_saved_grams ?? receipt?.net_savings ?? baselineCo2 - actualCo2);
+  const wasCached = Boolean(ecoStats.was_cached ?? receipt?.was_cached ?? false);
+  const model = String(receipt?.model_used ?? ecoStats.model ?? "gemini-2.0-flash");
+  const region = String(receipt?.server_location ?? "us-central1").split(" ")[0];
+  const cfeMap: Record<string, number> = { "us-central1": 89, "us-west1": 92, "europe-west1": 82 };
+  const tokensIn = prompt.split(/\s+/).length;
+  const tokensOut = response.split(/\s+/).length;
+  // Compression: backend eco_stats may have tokens_saved
+  const tokensSaved = Number(ecoStats.tokens_saved ?? 0);
+  const originalTokens = tokensIn + tokensSaved;
+  const compressed = tokensSaved > 0;
+
+  return {
+    cost_g: Math.round(actualCo2 * 1000) / 1000,
+    baseline_g: Math.round(baselineCo2 * 1000) / 1000,
+    saved_g: Math.round(savedCo2 * 1000) / 1000,
+    model: model.includes("/") ? model : `google/${model}`,
+    region,
+    cfe_percent: cfeMap[region] || 85,
+    tokens_in: tokensIn,
+    tokens_out: tokensOut,
+    latency_ms: 0, // will be measured client-side
+    cached: wasCached,
+    cache_hit_tokens: wasCached ? tokensIn : 0,
+    compressed,
+    original_tokens: originalTokens,
+    compressed_tokens: tokensIn,
+    compression_ratio: originalTokens > 0 ? tokensIn / originalTokens : 1,
+  };
+}
+
+/** Try calling the real backend. Returns { response, carbonMeta } or null on failure. */
+async function callBackend(
+  prompt: string,
+  chatId: string,
+): Promise<{ response: string; carbonMeta: CarbonMeta; deferred: boolean } | null> {
+  try {
+    const start = performance.now();
+    const result = await postOrchestrate({
+      prompt,
+      user_id: "sorcer-user",
+      project_id: chatId,
+    });
+    const latency = Math.round(performance.now() - start);
+
+    if (result.deferred) {
+      return {
+        response: "⏳ Your prompt has been queued for a greener window. The grid is currently carbon-heavy — Sorcer will process this when renewable energy is more available.",
+        carbonMeta: { ...makeDummyCarbonMeta(), cost_g: 0, baseline_g: 0, saved_g: 0, latency_ms: latency, cached: false, compressed: false },
+        deferred: true,
+      };
+    }
+
+    // Try to fetch the receipt for richer data
+    let receipt: Record<string, unknown> | null = null;
+    if (result.receipt_id) {
+      try {
+        receipt = await getReceipt(result.receipt_id) as unknown as Record<string, unknown>;
+      } catch { /* receipt fetch is optional */ }
+    }
+
+    const carbonMeta = mapBackendToCarbonMeta(
+      (result.eco_stats ?? {}) as Record<string, unknown>,
+      receipt,
+      prompt,
+      result.response,
+    );
+    carbonMeta.latency_ms = latency;
+
+    return { response: result.response, carbonMeta, deferred: false };
+  } catch {
+    return null; // Backend unreachable — caller will fall back to dummy
+  }
+}
+
 // ─── Model badge helper ─────────────────────────────────────────────────────
 
 const MODEL_DISPLAY: Record<string, { icon: typeof Leaf; color: string; label: string }> = {
+  "google/gemini-2.0-flash": { icon: Leaf, color: "text-moss", label: "Eco Flash" },
   "google/gemini-2.5-flash-lite": { icon: Leaf, color: "text-moss", label: "Eco" },
   "anthropic/claude-haiku-4.5": { icon: Zap, color: "text-topaz", label: "Balanced" },
   "openai/gpt-5.2": { icon: Flame, color: "text-witchberry", label: "Power" },
@@ -340,94 +428,8 @@ export default function LocalChatPage() {
     setLoaded(true);
   }, [chatId, selectedModelId]);
 
-  // Auto-send from ?query= param (homepage submit)
-  useEffect(() => {
-    if (!loaded || hasAutoSent) return;
-    const query = searchParams.get("query");
-    if (query) {
-      setHasAutoSent(true);
-      setInput(query);
-      // Clear the URL param
-      window.history.replaceState({}, "", `/chat/${chatId}`);
-      // Trigger send after a tick so input state is set
-      setTimeout(() => {
-        setInput("");
-        // Manually trigger the submit flow
-        const fakeSubmit = async () => {
-          setStatus("submitted");
-          const userMsg: StoredMessage = {
-            id: crypto.randomUUID(),
-            chatId,
-            role: "user",
-            content: query,
-            createdAt: new Date().toISOString(),
-            carbon: {
-              cost_g: 0, baseline_g: 0, saved_g: 0,
-              model: "", region: "", cfe_percent: 0,
-              tokens_in: query.split(/\s+/).length, tokens_out: 0,
-              latency_ms: 0, cached: false, cache_hit_tokens: 0,
-              compressed: false, original_tokens: 0, compressed_tokens: 0, compression_ratio: 1,
-            },
-          };
-          addMessage(userMsg);
-          setMessages((prev) => [...prev, userMsg]);
-          updateChat(chatId, { promptCount: 1 });
-          setChat((prev) => prev ? { ...prev, promptCount: 1 } : prev);
-
-          await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
-          setStatus("streaming");
-          const fullResponse = pickDummyResponse(query);
-          const carbonMeta = makeDummyCarbonMeta();
-          const assistantMsgId = crypto.randomUUID();
-          setStreamingMsgId(assistantMsgId);
-          setStreamingContent("");
-
-          let accumulated = "";
-          const chars = fullResponse.split("");
-          for (let i = 0; i < chars.length; i++) {
-            accumulated += chars[i];
-            setStreamingContent(accumulated);
-            const char = chars[i];
-            const delay = char === " " ? 8 : char === "\n" ? 25 : 12 + Math.random() * 8;
-            await new Promise((r) => setTimeout(r, delay));
-          }
-
-          const assistantMsg: StoredMessage = {
-            id: assistantMsgId,
-            chatId,
-            role: "assistant",
-            content: fullResponse,
-            createdAt: new Date().toISOString(),
-            carbon: carbonMeta,
-          };
-          addMessage(assistantMsg);
-          setMessages((prev) => [...prev, assistantMsg]);
-          updateChat(chatId, { carbonSaved: carbonMeta.saved_g, model: carbonMeta.model, region: carbonMeta.region });
-          setChat((prev) => prev ? { ...prev, carbonSaved: carbonMeta.saved_g, model: carbonMeta.model, region: carbonMeta.region } : prev);
-          setStreamingMsgId(null);
-          setStreamingContent("");
-          setStatus("ready");
-        };
-        fakeSubmit();
-      }, 100);
-    }
-  }, [loaded, hasAutoSent, searchParams, chatId]);
-
-  // Auto-scroll to bottom
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, streamingContent, scrollToBottom]);
-
-  // Handle sending a message
-  const handleSubmit = useCallback(async () => {
-    const prompt = input.trim();
-    if (!prompt || status !== "ready") return;
-
-    setInput("");
+  // ─── Shared send logic: tries backend, falls back to dummy ──────────────
+  const sendPrompt = useCallback(async (prompt: string, isFirstMessage: boolean) => {
     setStatus("submitted");
 
     // Save user message
@@ -448,35 +450,45 @@ export default function LocalChatPage() {
     addMessage(userMsg);
     setMessages((prev) => [...prev, userMsg]);
 
-    // Update chat title from first message
-    if (chat && chat.title === "New Conversation") {
+    // Update chat title + prompt count
+    const currentChat = getChat(chatId);
+    if (currentChat && (isFirstMessage || currentChat.title === "New Conversation")) {
       const title = prompt.length > 50 ? prompt.slice(0, 50) + "..." : prompt;
-      updateChat(chatId, { title, promptCount: (chat.promptCount || 0) + 1 });
+      updateChat(chatId, { title, promptCount: (currentChat.promptCount || 0) + 1 });
       setChat((prev) => prev ? { ...prev, title, promptCount: (prev.promptCount || 0) + 1 } : prev);
     } else {
-      updateChat(chatId, { promptCount: (chat?.promptCount || 0) + 1 });
+      updateChat(chatId, { promptCount: (currentChat?.promptCount || 0) + 1 });
       setChat((prev) => prev ? { ...prev, promptCount: (prev.promptCount || 0) + 1 } : prev);
     }
 
-    // "Thinking" phase — 1-2 seconds
-    await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
+    // Try real backend first
+    const backendResult = await callBackend(prompt, chatId);
 
-    // Start streaming
+    let fullResponse: string;
+    let carbonMeta: CarbonMeta;
+
+    if (backendResult) {
+      // Backend responded — use real data
+      fullResponse = backendResult.response;
+      carbonMeta = backendResult.carbonMeta;
+    } else {
+      // Backend offline — fall back to dummy with simulated delay
+      await new Promise((r) => setTimeout(r, 800 + Math.random() * 600));
+      fullResponse = pickDummyResponse(prompt);
+      carbonMeta = makeDummyCarbonMeta();
+    }
+
+    // Stream the response character by character
     setStatus("streaming");
-    const fullResponse = pickDummyResponse(prompt);
-    const carbonMeta = makeDummyCarbonMeta();
     const assistantMsgId = crypto.randomUUID();
     setStreamingMsgId(assistantMsgId);
     setStreamingContent("");
 
-    // Stream character by character
     let accumulated = "";
     const chars = fullResponse.split("");
     for (let i = 0; i < chars.length; i++) {
       accumulated += chars[i];
       setStreamingContent(accumulated);
-
-      // Variable speed: faster for spaces/newlines, slower for content
       const char = chars[i];
       const delay = char === " " ? 8 : char === "\n" ? 25 : 12 + Math.random() * 8;
       await new Promise((r) => setTimeout(r, delay));
@@ -495,19 +507,45 @@ export default function LocalChatPage() {
     setMessages((prev) => [...prev, assistantMsg]);
 
     // Update chat carbon stats
-    const newSaved = (chat?.carbonSaved || 0) + carbonMeta.saved_g;
-    updateChat(chatId, {
-      carbonSaved: newSaved,
-      model: carbonMeta.model,
-      region: carbonMeta.region,
-    });
+    const newSaved = (getChat(chatId)?.carbonSaved || 0) + carbonMeta.saved_g;
+    updateChat(chatId, { carbonSaved: newSaved, model: carbonMeta.model, region: carbonMeta.region });
     setChat((prev) => prev ? { ...prev, carbonSaved: newSaved, model: carbonMeta.model, region: carbonMeta.region } : prev);
 
     // Reset
     setStreamingMsgId(null);
     setStreamingContent("");
     setStatus("ready");
-  }, [input, status, chatId, chat]);
+  }, [chatId]);
+
+  // Auto-send from ?query= param (homepage submit)
+  useEffect(() => {
+    if (!loaded || hasAutoSent) return;
+    const query = searchParams.get("query");
+    if (query) {
+      setHasAutoSent(true);
+      setInput("");
+      window.history.replaceState({}, "", `/chat/${chatId}`);
+      setTimeout(() => { sendPrompt(query, true); }, 100);
+    }
+  }, [loaded, hasAutoSent, searchParams, chatId, sendPrompt]);
+
+  // Auto-scroll to bottom
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, streamingContent, scrollToBottom]);
+
+  // Handle sending a message
+  const handleSubmit = useCallback(async () => {
+    const prompt = input.trim();
+    if (!prompt || status !== "ready") return;
+    setInput("");
+    const isFirst = chat?.title === "New Conversation";
+    await sendPrompt(prompt, isFirst ?? false);
+  }, [input, status, chat, sendPrompt]);
 
   // Compute total carbon saved
   const totalSaved = useMemo(() => {

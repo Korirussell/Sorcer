@@ -49,29 +49,29 @@ function CursorOrbInner() {
       const pmy = prevMouseRef.current.y;
       const speed = Math.sqrt((mx - pmx) ** 2 + (my - pmy) ** 2);
 
-      // Spawn subtle ember particles — fewer, smaller
-      const spawnCount = Math.min(Math.floor(speed * 0.15) + (frame % 3 === 0 ? 1 : 0), 2);
+      // Spawn ember particles — visible trail
+      const spawnCount = Math.min(Math.floor(speed * 0.3) + 1, 4);
       if (mx > 0 && my > 0) {
         for (let i = 0; i < spawnCount; i++) {
           const t = i / Math.max(spawnCount, 1);
           const sx = pmx + (mx - pmx) * t;
           const sy = pmy + (my - pmy) * t;
           embersRef.current.push({
-            x: sx + (Math.random() - 0.5) * 4,
-            y: sy + (Math.random() - 0.5) * 4,
-            vx: (Math.random() - 0.5) * 0.8,
-            vy: -0.5 - Math.random() * 0.6,
+            x: sx + (Math.random() - 0.5) * 8,
+            y: sy + (Math.random() - 0.5) * 8,
+            vx: (Math.random() - 0.5) * 1.2,
+            vy: -0.8 - Math.random() * 1.0,
             life: 0,
-            maxLife: 20 + Math.random() * 15,
-            size: 0.6 + Math.random() * 1.2,
-            hue: 205 + Math.random() * 30,
+            maxLife: 25 + Math.random() * 20,
+            size: 1.0 + Math.random() * 2.0,
+            hue: 200 + Math.random() * 40,
           });
         }
       }
 
       // Cap embers
-      if (embersRef.current.length > 40) {
-        embersRef.current = embersRef.current.slice(-40);
+      if (embersRef.current.length > 80) {
+        embersRef.current = embersRef.current.slice(-80);
       }
 
       // Update & draw embers
@@ -88,54 +88,64 @@ function CursorOrbInner() {
         const alpha = progress < 0.15 ? progress / 0.15 : 1 - (progress - 0.15) / 0.85;
         const size = e.size * (1 - progress * 0.4);
 
-        // Soft glow only
-        const grad = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, size * 2);
-        grad.addColorStop(0, `hsla(${e.hue}, 70%, 75%, ${alpha * 0.35})`);
+        // Ember glow
+        const grad = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, size * 3);
+        grad.addColorStop(0, `hsla(${e.hue}, 80%, 75%, ${alpha * 0.5})`);
+        grad.addColorStop(0.5, `hsla(${e.hue}, 70%, 55%, ${alpha * 0.2})`);
         grad.addColorStop(1, `hsla(${e.hue}, 70%, 50%, 0)`);
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.arc(e.x, e.y, size * 2, 0, Math.PI * 2);
+        ctx.arc(e.x, e.y, size * 3, 0, Math.PI * 2);
         ctx.fill();
 
-        // Tiny bright core
-        ctx.fillStyle = `hsla(${e.hue}, 50%, 92%, ${alpha * 0.5})`;
+        // Bright core
+        ctx.fillStyle = `hsla(${e.hue}, 50%, 92%, ${alpha * 0.7})`;
         ctx.beginPath();
-        ctx.arc(e.x, e.y, size * 0.3, 0, Math.PI * 2);
+        ctx.arc(e.x, e.y, size * 0.5, 0, Math.PI * 2);
         ctx.fill();
 
         return true;
       });
 
-      // Main orb — subtle and aligned
+      // Main orb — clearly visible as the cursor replacement
       if (mx > 0 && my > 0) {
-        const pulse = Math.sin(frame * 0.08) * 0.1 + 1;
-        const orbSize = 5 * pulse;
+        const pulse = Math.sin(frame * 0.08) * 0.12 + 1;
+        const orbSize = 12 * pulse;
 
-        // Soft outer glow — very subtle
-        const outerGlow = ctx.createRadialGradient(mx, my, 0, mx, my, orbSize * 2.5);
-        outerGlow.addColorStop(0, "hsla(215, 70%, 65%, 0.08)");
-        outerGlow.addColorStop(0.6, "hsla(220, 80%, 55%, 0.03)");
+        // Wide outer aura
+        const outerGlow = ctx.createRadialGradient(mx, my, 0, mx, my, orbSize * 3);
+        outerGlow.addColorStop(0, "hsla(215, 80%, 65%, 0.15)");
+        outerGlow.addColorStop(0.4, "hsla(220, 85%, 55%, 0.06)");
         outerGlow.addColorStop(1, "hsla(220, 80%, 40%, 0)");
         ctx.fillStyle = outerGlow;
         ctx.beginPath();
-        ctx.arc(mx, my, orbSize * 2.5, 0, Math.PI * 2);
+        ctx.arc(mx, my, orbSize * 3, 0, Math.PI * 2);
         ctx.fill();
 
-        // Inner orb
+        // Inner fire orb
         const innerGlow = ctx.createRadialGradient(mx, my, 0, mx, my, orbSize);
-        innerGlow.addColorStop(0, "hsla(210, 60%, 92%, 0.4)");
-        innerGlow.addColorStop(0.4, "hsla(215, 75%, 65%, 0.2)");
-        innerGlow.addColorStop(1, "hsla(225, 80%, 50%, 0)");
+        innerGlow.addColorStop(0, "hsla(200, 70%, 95%, 0.6)");
+        innerGlow.addColorStop(0.3, "hsla(210, 85%, 70%, 0.4)");
+        innerGlow.addColorStop(0.7, "hsla(225, 90%, 55%, 0.15)");
+        innerGlow.addColorStop(1, "hsla(230, 80%, 45%, 0)");
         ctx.fillStyle = innerGlow;
         ctx.beginPath();
         ctx.arc(mx, my, orbSize, 0, Math.PI * 2);
         ctx.fill();
 
-        // Tiny white core
-        ctx.fillStyle = `hsla(210, 50%, 96%, ${0.35 + Math.sin(frame * 0.12) * 0.1})`;
+        // Bright white-hot core (the actual cursor point)
+        ctx.fillStyle = `hsla(210, 60%, 97%, ${0.7 + Math.sin(frame * 0.15) * 0.15})`;
         ctx.beginPath();
-        ctx.arc(mx, my, 1.5, 0, Math.PI * 2);
+        ctx.arc(mx, my, 3, 0, Math.PI * 2);
         ctx.fill();
+
+        // Secondary ring pulse
+        const ringAlpha = 0.08 + Math.sin(frame * 0.06) * 0.04;
+        ctx.strokeStyle = `hsla(215, 70%, 70%, ${ringAlpha})`;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.arc(mx, my, orbSize * 1.8, 0, Math.PI * 2);
+        ctx.stroke();
       }
 
       rafRef.current = requestAnimationFrame(draw);

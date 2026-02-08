@@ -14,6 +14,11 @@
 /* ═══════════════════════════════════════════════════════
    BOTANICAL JOURNAL — Design Tokens
    ═══════════════════════════════════════════════════════ */
+/* Hide system cursor globally — CursorOrb replaces it */
+*, *::before, *::after {
+  cursor: none !important;
+}
+
 :root {
   /* ── Core palette ── */
   --parchment: #F7F3E8;
