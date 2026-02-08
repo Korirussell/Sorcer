@@ -24,22 +24,31 @@ class EcoOrchestrator:
     async def process(self, req):
         # Bypass: direct LLM, no eco logic
         if getattr(req, "bypass_eco", False):
+            original_tokens = len(req.prompt.split())
             raw = await self.client.raw_llm_generate(req.prompt, "gemini-2.0-flash")
             return {
                 "status": "complete",
                 "response": raw,
                 "receipt_id": None,
                 "eco_stats": {"warning": "No CO2 savings applied"},
+                "input_tokens": original_tokens,
+                "compressed_text_tokens": original_tokens,  # no compression in bypass
+                "compressed_prompt": req.prompt,
             }
 
         # 0: Check cache (hash then semantic)
         cached = check_if_prompt_is_in_cache(req.prompt)
         if cached is not None:
+            # Still run compression to report token stats even on cache hits
+            comp_cached = self.compressor.compress(req.prompt)
             return {
                 "status": "complete",
                 "response": cached.get("response", ""),
                 "receipt_id": cached.get("receipt_id"),
                 "eco_stats": {**(cached.get("eco_stats") or {}), "was_cached": True},
+                "input_tokens": comp_cached["original_count"],
+                "compressed_text_tokens": comp_cached["final_count"],
+                "compressed_prompt": comp_cached["compressed_text"],
             }
 
         # 1: Compress
@@ -113,6 +122,9 @@ class EcoOrchestrator:
             "response": raw_response,
             "receipt_id": receipt_id,
             "eco_stats": impact,
+            "input_tokens": comp["original_count"],
+            "compressed_text_tokens": comp["final_count"],
+            "compressed_prompt": comp["compressed_text"],
         }
 
     async def execute_deferred_task(self, task: dict) -> dict | None:

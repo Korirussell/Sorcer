@@ -48,6 +48,9 @@ async def orchestrate(req: OrchestrateRequest):
         "receipt_id": results.get("receipt_id") or "rec_uuid",
         "deferred": False,
         "eco_stats": results.get("eco_stats", {}),
+        "input_tokens": results.get("input_tokens"),
+        "compressed_text_tokens": results.get("compressed_text_tokens"),
+        "compressed_prompt": results.get("compressed_prompt"),
     }
 
 
