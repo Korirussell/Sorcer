@@ -280,7 +280,8 @@ function StepCard({
                     </button>
                   </div>
                   <div className="relative group">
-                    <div className={`enchanted-terminal p-4 text-[12px] leading-relaxed overflow-y-auto whitespace-pre-wrap scroll-smooth transition-[max-height] duration-300 ${expanded ? "max-h-[80vh]" : "max-h-[24rem]"}`}>
+                    <div style={{ cursor: "auto", overflowY: "scroll" }}
+                    className={`enchanted-terminal p-4 text-[12px] leading-relaxed whitespace-pre-wrap scroll-smooth transition-[max-height] duration-300 [&]:!cursor-auto [scrollbar-width:thin] [scrollbar-color:rgba(160,160,136,0.4)_transparent] ${expanded ? "max-h-[80vh]" : "max-h-[24rem]"}`}>
                       {result.output}
                     </div>
                     {/* Fade hint + expand toggle */}
