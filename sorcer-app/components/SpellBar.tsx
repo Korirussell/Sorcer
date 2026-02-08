@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Send, Leaf, Zap, Flame, Sprout, ChevronDown, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { useEnergy } from "@/context/EnergyContext";
@@ -35,6 +36,34 @@ export function SpellBar({
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const { mode, selectedModelId, setMode, setSelectedModelId } = useEnergy();
+
+  // Portal positioning for dropdown (escapes overflow:hidden)
+  const modelBtnRef = useRef<HTMLButtonElement>(null);
+  const scheduleBtnRef = useRef<HTMLButtonElement>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
+  const [schedulePos, setSchedulePos] = useState<{ top: number; right: number } | null>(null);
+
+  const updateDropdownPos = useCallback(() => {
+    if (modelBtnRef.current) {
+      const rect = modelBtnRef.current.getBoundingClientRect();
+      setDropdownPos({ top: rect.top - 8, left: rect.left });
+    }
+  }, []);
+
+  const updateSchedulePos = useCallback(() => {
+    if (scheduleBtnRef.current) {
+      const rect = scheduleBtnRef.current.getBoundingClientRect();
+      setSchedulePos({ top: rect.top - 8, right: window.innerWidth - rect.right });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isDropdownOpen) updateDropdownPos();
+  }, [isDropdownOpen, updateDropdownPos]);
+
+  useEffect(() => {
+    if (isScheduleOpen) updateSchedulePos();
+  }, [isScheduleOpen, updateSchedulePos]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,6 +119,7 @@ export function SpellBar({
           {/* Model selector pill */}
           <div className="relative">
             <button
+              ref={modelBtnRef}
               type="button"
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className={`
@@ -115,62 +145,6 @@ export function SpellBar({
               <ChevronDown className={`w-3 h-3 opacity-50 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`} />
             </button>
 
-            {/* Dropdown */}
-            {isDropdownOpen && (
-              <div className="absolute bottom-full left-0 mb-2 w-64 bg-[#fffbf0] border border-[#5c4033]/30 rounded-2xl shadow-specimen-hover z-50 overflow-hidden animate-page-turn">
-                <div className="p-2">
-                  {/* Auto option */}
-                  <button
-                    type="button"
-                    onClick={switchToAuto}
-                    className={`
-                      w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-200
-                      ${mode === "auto" ? "bg-moss/10 border border-moss/20" : "hover:bg-oak/5"}
-                    `}
-                  >
-                    <div className="w-7 h-7 rounded-lg bg-moss/15 flex items-center justify-center">
-                      <Sprout className="w-4 h-4 text-moss" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-sm font-medium text-oak">Auto Sustainable</div>
-                      <div className="text-[11px] text-oak-light/50">Oracle selects cleanest model</div>
-                    </div>
-                    {mode === "auto" && <div className="w-2 h-2 rounded-full bg-moss" />}
-                  </button>
-
-                  <div className="my-1.5 mx-3 border-t border-oak/8" />
-                  <div className="px-3 py-1 text-[10px] font-medium text-oak/30 uppercase tracking-wider">Manual</div>
-
-                  {/* Model options */}
-                  {models.map((model) => {
-                    const isSelected = mode === "manual" && model.id === selectedModelId;
-                    return (
-                      <button
-                        type="button"
-                        key={model.id}
-                        onClick={() => {
-                          if (mode !== "manual") switchToManual();
-                          handleModelChange(model.id);
-                        }}
-                        className={`
-                          w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-200
-                          ${isSelected ? "bg-oak/5 border border-oak/10" : "hover:bg-oak/5"}
-                        `}
-                      >
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isSelected ? "bg-oak/10" : "bg-oak/5"}`}>
-                          <model.icon className={`w-4 h-4 ${model.color}`} />
-                        </div>
-                        <div className="flex-1">
-                          <div className="text-sm font-medium text-oak">{model.name}</div>
-                          <div className="text-[11px] text-oak-light/50">{model.description}</div>
-                        </div>
-                        {isSelected && <div className={`w-2 h-2 rounded-full ${model.color.replace("text-", "bg-")}`} />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Text input */}
@@ -190,6 +164,7 @@ export function SpellBar({
           {enableScheduling && (
             <div className="relative">
               <button
+                ref={scheduleBtnRef}
                 type="button"
                 disabled={!input.trim() || status !== "ready"}
                 onClick={() => setIsScheduleOpen(!isScheduleOpen)}
@@ -204,28 +179,6 @@ export function SpellBar({
               >
                 <Clock className="w-4 h-4" />
               </button>
-              {isScheduleOpen && (
-                <div className="absolute bottom-full right-0 mb-2 w-52 bg-parchment border border-oak/15 rounded-xl shadow-specimen-hover z-50 overflow-hidden animate-page-turn">
-                  <div className="px-3 py-2 text-[10px] font-medium text-oak/40 uppercase tracking-wider border-b border-oak/8">Schedule for Later</div>
-                  {SCHEDULE_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => {
-                        if (input.trim()) {
-                          toast.success(`Prompt scheduled: ${opt.label}`, { description: input.trim().slice(0, 60) + (input.trim().length > 60 ? "..." : "") });
-                          setInput("");
-                          setIsScheduleOpen(false);
-                        }
-                      }}
-                      className="w-full text-left px-3 py-2.5 text-sm text-oak hover:bg-moss/8 transition-colors flex items-center gap-2"
-                    >
-                      <Clock className="w-3 h-3 text-topaz" />
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           )}
 
@@ -258,9 +211,96 @@ export function SpellBar({
       </form>
       </SearchVines>
 
-      {/* Close dropdowns on outside click */}
-      {(isDropdownOpen || isScheduleOpen) && (
-        <div className="fixed inset-0 z-40" onClick={() => { setIsDropdownOpen(false); setIsScheduleOpen(false); }} />
+      {/* Portal-rendered dropdowns (escape overflow:hidden) */}
+      {isDropdownOpen && dropdownPos && createPortal(
+        <>
+          <div className="fixed inset-0 z-[9990]" onClick={() => setIsDropdownOpen(false)} />
+          <div
+            className="fixed z-[9991] w-64 bg-[#fffbf0] border border-[#5c4033]/30 rounded-2xl shadow-lg overflow-hidden"
+            style={{ top: dropdownPos.top, left: dropdownPos.left, transform: 'translateY(-100%)' }}
+          >
+            <div className="p-2">
+              <button
+                type="button"
+                onClick={switchToAuto}
+                className={`
+                  w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-200
+                  ${mode === "auto" ? "bg-moss/10 border border-moss/20" : "hover:bg-oak/5"}
+                `}
+              >
+                <div className="w-7 h-7 rounded-lg bg-moss/15 flex items-center justify-center">
+                  <Sprout className="w-4 h-4 text-moss" />
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-oak">Auto Sustainable</div>
+                  <div className="text-[11px] text-oak-light/50">Oracle selects cleanest model</div>
+                </div>
+                {mode === "auto" && <div className="w-2 h-2 rounded-full bg-moss" />}
+              </button>
+
+              <div className="my-1.5 mx-3 border-t border-oak/8" />
+              <div className="px-3 py-1 text-[10px] font-medium text-oak/30 uppercase tracking-wider">Manual</div>
+
+              {models.map((model) => {
+                const isSelected = mode === "manual" && model.id === selectedModelId;
+                return (
+                  <button
+                    type="button"
+                    key={model.id}
+                    onClick={() => {
+                      if (mode !== "manual") switchToManual();
+                      handleModelChange(model.id);
+                    }}
+                    className={`
+                      w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-200
+                      ${isSelected ? "bg-oak/5 border border-oak/10" : "hover:bg-oak/5"}
+                    `}
+                  >
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isSelected ? "bg-oak/10" : "bg-oak/5"}`}>
+                      <model.icon className={`w-4 h-4 ${model.color}`} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-oak">{model.name}</div>
+                      <div className="text-[11px] text-oak-light/50">{model.description}</div>
+                    </div>
+                    {isSelected && <div className={`w-2 h-2 rounded-full ${model.color.replace("text-", "bg-")}`} />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+
+      {isScheduleOpen && schedulePos && createPortal(
+        <>
+          <div className="fixed inset-0 z-[9990]" onClick={() => setIsScheduleOpen(false)} />
+          <div
+            className="fixed z-[9991] w-52 bg-parchment border border-oak/15 rounded-xl shadow-lg overflow-hidden"
+            style={{ top: schedulePos.top, right: schedulePos.right, transform: 'translateY(-100%)' }}
+          >
+            <div className="px-3 py-2 text-[10px] font-medium text-oak/40 uppercase tracking-wider border-b border-oak/8">Schedule for Later</div>
+            {SCHEDULE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  if (input.trim()) {
+                    toast.success(`Prompt scheduled: ${opt.label}`, { description: input.trim().slice(0, 60) + (input.trim().length > 60 ? "..." : "") });
+                    setInput("");
+                    setIsScheduleOpen(false);
+                  }
+                }}
+                className="w-full text-left px-3 py-2.5 text-sm text-oak hover:bg-moss/8 transition-colors flex items-center gap-2"
+              >
+                <Clock className="w-3 h-3 text-topaz" />
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </>,
+        document.body
       )}
     </div>
   );

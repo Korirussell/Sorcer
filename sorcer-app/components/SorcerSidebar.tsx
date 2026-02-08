@@ -1,6 +1,8 @@
 "use client";
 
+import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
+import { AnimatePresence } from "framer-motion";
 import {
   X,
   Leaf,
@@ -15,10 +17,15 @@ import {
   Sun,
   Sparkles,
   PanelLeftClose,
+  FlaskConical,
+  Trash2,
+  Info,
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import { useEnergy } from "@/context/EnergyContext";
 import { useTheme } from "next-themes";
+import { getAllChats, clearAllChats, createChat, seedIfEmpty, type ChatRecord } from "@/lib/localChatStore";
+import { ChatBreakdownPopup } from "@/components/ChatBreakdownPopup";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -31,6 +38,17 @@ const SHORTCUT_KEYS = ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5"];
 // Mock pending task count (would come from shared state in real app)
 const PENDING_TASKS = 2;
 
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return `${Math.floor(days / 7)}w ago`;
+}
+
 export function SorcerSidebar({ isOpen, onClose, onCollapse }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -38,11 +56,43 @@ export function SorcerSidebar({ isOpen, onClose, onCollapse }: SidebarProps) {
   const { theme, setTheme } = useTheme();
   const isDark = theme === "dark";
 
-  const chatHistory = [
-    { id: "1", title: "Carbon footprint analysis", preview: "What's the carbon impact of...", timestamp: "2h ago", eco: true },
-    { id: "2", title: "Sustainable AI models", preview: "Compare eco-friendly AI options...", timestamp: "1d ago", eco: true },
-    { id: "3", title: "Energy optimization", preview: "How to reduce AI energy...", timestamp: "3d ago", eco: false },
-  ];
+  const [chatHistory, setChatHistory] = useState<ChatRecord[]>([]);
+  const [breakdownChat, setBreakdownChat] = useState<ChatRecord | null>(null);
+
+  const refreshChats = useCallback(() => {
+    seedIfEmpty();
+    setChatHistory(getAllChats());
+  }, []);
+
+  useEffect(() => {
+    refreshChats();
+  }, [refreshChats]);
+
+  // Refresh when navigating back to sidebar
+  useEffect(() => {
+    refreshChats();
+  }, [pathname, refreshChats]);
+
+  const handleNewChat = () => {
+    const id = crypto.randomUUID();
+    createChat({
+      id,
+      title: "New Conversation",
+      createdAt: new Date().toISOString(),
+      carbonSaved: 0,
+      promptCount: 0,
+      model: "auto",
+      region: "auto",
+    });
+    refreshChats();
+    router.push(`/chat/${id}`);
+    onClose();
+  };
+
+  const handleClearAll = () => {
+    clearAllChats();
+    refreshChats();
+  };
 
   const navItems = [
     { id: "history", label: "Field Notes", icon: BookOpen, href: "/", badge: 0 },
@@ -163,22 +213,51 @@ export function SorcerSidebar({ isOpen, onClose, onCollapse }: SidebarProps) {
           {chatHistory.map((chat) => (
             <button
               key={chat.id}
+              onClick={() => { router.push(`/chat/${chat.id}`); onClose(); }}
               className="w-full text-left p-3 rounded-xl bg-parchment/60 border border-oak/8 hover:border-oak/15 hover:shadow-sm transition-all duration-200 group"
             >
               <div className="flex items-start gap-2.5">
-                <div className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${chat.eco ? "bg-moss" : "bg-topaz"}`} />
+                <div className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${chat.carbonSaved > 0 ? "bg-moss" : "bg-topaz"}`} />
                 <div className="flex-1 min-w-0">
                   <h4 className="text-sm font-medium text-oak truncate group-hover:text-moss transition-colors">
                     {chat.title}
                   </h4>
-                  <p className="text-xs text-oak-light/50 truncate mt-0.5">{chat.preview}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {chat.carbonSaved > 0 && (
+                      <span className="text-[10px] text-moss font-medium">
+                        −{chat.carbonSaved < 1000 ? `${chat.carbonSaved.toFixed(1)}g` : `${(chat.carbonSaved / 1000).toFixed(2)}kg`}
+                      </span>
+                    )}
+                    <span className="text-[10px] text-oak/25">{chat.promptCount} prompts</span>
+                  </div>
                 </div>
-                <span className="text-[10px] text-oak/30 shrink-0">{chat.timestamp}</span>
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <span className="text-[10px] text-oak/30">{timeAgo(chat.createdAt)}</span>
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setBreakdownChat(chat); }}
+                      className="p-1 rounded-md text-oak/20 hover:text-topaz hover:bg-topaz/10 transition-colors"
+                      title="Quick Breakdown"
+                    >
+                      <Info className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); router.push(`/breakdown/${chat.id}`); onClose(); }}
+                      className="p-1 rounded-md text-oak/20 hover:text-moss hover:bg-moss/10 transition-colors"
+                      title="Full Breakdown Page"
+                    >
+                      <FlaskConical className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
               </div>
             </button>
           ))}
 
-          <button className="w-full mt-1 p-2.5 rounded-xl border border-dashed border-oak/15 text-xs text-oak/40 hover:text-oak/60 hover:border-oak/25 transition-all duration-200 flex items-center justify-center gap-1.5">
+          <button
+            onClick={handleNewChat}
+            className="w-full mt-1 p-2.5 rounded-xl border border-dashed border-oak/15 text-xs text-oak/40 hover:text-oak/60 hover:border-oak/25 transition-all duration-200 flex items-center justify-center gap-1.5"
+          >
             <Feather className="w-3 h-3" />
             New Conversation
           </button>
@@ -205,6 +284,17 @@ export function SorcerSidebar({ isOpen, onClose, onCollapse }: SidebarProps) {
           Tour Guide
         </button>
 
+        {/* Clear all chats */}
+        {chatHistory.length > 0 && (
+          <button
+            onClick={handleClearAll}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-witchberry/50 hover:text-witchberry hover:bg-witchberry/5 transition-all duration-200 active:scale-95"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Clear All Chats
+          </button>
+        )}
+
         <div className="flex items-center justify-between text-[10px] text-oak/30 pt-1">
           <span className="font-sub text-xs">Sorcer v1.0</span>
           <div className="flex items-center gap-1">
@@ -213,6 +303,16 @@ export function SorcerSidebar({ isOpen, onClose, onCollapse }: SidebarProps) {
           </div>
         </div>
       </div>
+
+      {/* Breakdown Popup */}
+      <AnimatePresence>
+        {breakdownChat && (
+          <ChatBreakdownPopup
+            chat={breakdownChat}
+            onClose={() => setBreakdownChat(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -3,12 +3,14 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Leaf, Zap, Shield, WifiOff } from "lucide-react";
+import { motion } from "framer-motion";
+import { Leaf, Zap, Shield, WifiOff, ArrowRight, Bot } from "lucide-react";
 import { SpellBar } from "@/components/SpellBar";
+import { StatsTicker } from "@/components/StatsTicker";
 import { useEnergy } from "@/context/EnergyContext";
-import { postOracleRoute } from "@/lib/backendApi";
 import { generateUUID } from "@/lib/utils";
 import { getHealth } from "@/utils/api";
+import { getAllChats, seedIfEmpty, createChat } from "@/lib/localChatStore";
 
 function TiltCard({ children, className }: { children: React.ReactNode; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -43,10 +45,35 @@ function TiltCard({ children, className }: { children: React.ReactNode; classNam
   );
 }
 
-function setCookie(name: string, value: string) {
-  const maxAge = 60 * 60 * 24 * 365;
-  // biome-ignore lint/suspicious/noDocumentCookie: needed for client-side cookie setting
-  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}`;
+// Animated tagline — words glow sequentially
+function GlowingTagline({ text }: { text: string }) {
+  const words = text.split(" ");
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveIdx((prev) => (prev + 1) % words.length);
+    }, 800);
+    return () => clearInterval(interval);
+  }, [words.length]);
+
+  return (
+    <p className="text-lg sm:text-xl font-sub text-oak-light/60 mb-10 max-w-lg mx-auto leading-relaxed">
+      {words.map((word, i) => (
+        <span
+          key={i}
+          className="transition-all duration-500 inline-block mr-[0.3em]"
+          style={{
+            color: i === activeIdx ? "var(--moss)" : undefined,
+            textShadow: i === activeIdx ? "0 0 12px rgba(75,106,76,0.3)" : "none",
+            transform: i === activeIdx ? "translateY(-1px)" : "translateY(0)",
+          }}
+        >
+          {word}
+        </span>
+      ))}
+    </p>
+  );
 }
 
 export default function HomePage() {
@@ -54,6 +81,7 @@ export default function HomePage() {
   const { mode, selectedModelId } = useEnergy();
   const [input, setInput] = useState("");
   const [status, setStatus] = useState<"ready" | "submitted" | "streaming" | "error">("ready");
+  const [lastChat, setLastChat] = useState<{ title: string; model: string; region: string; saved: number } | null>(null);
 
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
 
@@ -65,30 +93,43 @@ export default function HomePage() {
     return () => { cancelled = true; };
   }, []);
 
-  const handleSpellSubmit = async () => {
+  // Seed localStorage and get last chat
+  useEffect(() => {
+    seedIfEmpty();
+    const chats = getAllChats();
+    if (chats.length > 0) {
+      const c = chats[0];
+      setLastChat({
+        title: c.title,
+        model: c.model.split("/").pop() || c.model,
+        region: c.region,
+        saved: c.carbonSaved,
+      });
+    }
+  }, []);
+
+  const handleSpellSubmit = () => {
     const prompt = input.trim();
     if (!prompt || status !== "ready") return;
 
     setStatus("submitted");
 
-    try {
-      let modelIdToUse = selectedModelId;
+    const chatId = generateUUID();
+    const title = prompt.length > 50 ? prompt.slice(0, 50) + "..." : prompt;
 
-      if (mode === "auto" || !modelIdToUse) {
-        const oracle = await postOracleRoute({ prompt });
-        modelIdToUse = oracle.model_id;
-      }
+    // Create chat in localStorage immediately
+    createChat({
+      id: chatId,
+      title,
+      createdAt: new Date().toISOString(),
+      carbonSaved: 0,
+      promptCount: 0,
+      model: selectedModelId || "auto",
+      region: "auto",
+    });
 
-      if (modelIdToUse) {
-        setCookie("chat-model", modelIdToUse);
-      }
-
-      const chatId = generateUUID();
-      router.push(`/chat/${chatId}?query=${encodeURIComponent(prompt)}`);
-    } catch (e) {
-      console.error("Failed to route prompt via Oracle:", e);
-      setStatus("error");
-    }
+    // Navigate to the client-side chat page with the initial query
+    router.push(`/chat/${chatId}?query=${encodeURIComponent(prompt)}`);
   };
 
   const features = [
@@ -119,7 +160,12 @@ export default function HomePage() {
     <div className="min-h-[calc(100vh-3rem)] py-10">
       <div className="flex flex-col max-w-2xl mx-auto w-full px-6 text-center">
           {/* Logo */}
-          <div className="mb-0 flex justify-center">
+          <motion.div
+            className="mb-0 flex justify-center"
+            initial={{ opacity: 0, y: -20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+          >
             <Image
               src="/images/logo.png"
               alt="Sorcer Logo"
@@ -128,18 +174,28 @@ export default function HomePage() {
               priority
               className="drop-shadow-lg"
             />
-          </div>
+          </motion.div>
 
           {/* Title */}
-          <h1 className="text-6xl sm:text-7xl md:text-8xl font-header text-oak mb-3 leading-[0.9] tracking-tight -mt-8">
+          <motion.h1
+            className="text-6xl sm:text-7xl md:text-8xl font-header text-oak mb-3 leading-[0.9] tracking-tight -mt-8"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.6 }}
+          >
             Sorcer
-          </h1>
-          <p className="text-lg sm:text-xl font-sub text-oak-light/60 mb-10 max-w-lg mx-auto leading-relaxed">
-            Route prompts to the cleanest available intelligence using real-time carbon &amp; weather signals
-          </p>
+          </motion.h1>
+
+          {/* Animated tagline */}
+          <GlowingTagline text="Route prompts to the cleanest available intelligence using real-time carbon & weather signals" />
 
           {/* SpellBar */}
-          <div className="mb-12">
+          <motion.div
+            className="mb-6"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4, duration: 0.6 }}
+          >
             <SpellBar
               input={input}
               setInput={setInput}
@@ -147,7 +203,17 @@ export default function HomePage() {
               status={status}
               enableScheduling
             />
-          </div>
+          </motion.div>
+
+          {/* Stats ticker */}
+          <motion.div
+            className="mb-10"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.6 }}
+          >
+            <StatsTicker />
+          </motion.div>
 
           {/* Backend status banner */}
           {backendOnline === false && (
@@ -157,26 +223,88 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* Feature cards — 3D Tilt Specimen Cards */}
+          {/* Feature cards — 3D Tilt Specimen Cards with stagger */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mx-auto">
-            {features.map((feature) => (
-              <TiltCard
+            {features.map((feature, i) => (
+              <motion.div
                 key={feature.title}
-                className="specimen-card p-5 text-left group cursor-default"
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.7 + i * 0.15, type: "spring", stiffness: 120, damping: 20 }}
               >
-                <div className={`w-9 h-9 rounded-xl ${feature.bg} flex items-center justify-center mb-3`}>
-                  <feature.icon className={`w-4.5 h-4.5 ${feature.color}`} />
-                </div>
-                <h3 className="text-sm font-semibold text-oak mb-1">{feature.title}</h3>
-                <p className="text-xs text-oak-light/50 leading-relaxed">{feature.description}</p>
-              </TiltCard>
+                <TiltCard
+                  className="specimen-card p-5 text-left group cursor-default"
+                >
+                  <div className={`w-9 h-9 rounded-xl ${feature.bg} flex items-center justify-center mb-3`}>
+                    <feature.icon className={`w-4.5 h-4.5 ${feature.color}`} />
+                  </div>
+                  <h3 className="text-sm font-semibold text-oak mb-1">{feature.title}</h3>
+                  <p className="text-xs text-oak-light/50 leading-relaxed">{feature.description}</p>
+                </TiltCard>
+              </motion.div>
             ))}
           </div>
 
+          {/* Last expedition summary */}
+          {lastChat && (
+            <motion.div
+              className="mt-8 specimen-card p-4 text-left"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.2 }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-moss/10 flex items-center justify-center shrink-0">
+                  <Bot className="w-4 h-4 text-moss" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] text-oak/30 uppercase tracking-wider mb-0.5">Last Expedition</p>
+                  <p className="text-sm text-oak truncate">{lastChat.title}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] text-oak/40">{lastChat.model}</span>
+                    <span className="text-[10px] text-oak/20">·</span>
+                    <span className="text-[10px] text-oak/40">{lastChat.region}</span>
+                    {lastChat.saved > 0 && (
+                      <>
+                        <span className="text-[10px] text-oak/20">·</span>
+                        <span className="text-[10px] text-moss font-medium">saved {lastChat.saved.toFixed(1)}g</span>
+                      </>
+                    )}
+                  </div>
+                  {/* Mini savings bar */}
+                  {lastChat.saved > 0 && (
+                    <div className="mt-2 h-1 rounded-full bg-oak/8 overflow-hidden w-full max-w-[200px]">
+                      <motion.div
+                        className="h-full rounded-full bg-moss/40"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min(lastChat.saved * 20, 100)}%` }}
+                        transition={{ duration: 1, delay: 1.5, ease: "easeOut" }}
+                      />
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    const chats = getAllChats();
+                    if (chats[0]) router.push(`/breakdown/${chats[0].id}`);
+                  }}
+                  className="p-2 rounded-lg text-oak/30 hover:text-moss hover:bg-moss/10 transition-colors"
+                >
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </motion.div>
+          )}
+
           {/* Subtle footer tagline */}
-          <p className="mt-12 text-[11px] text-oak/20 font-sub">
+          <motion.p
+            className="mt-12 text-[11px] text-oak/20 font-sub"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1.5 }}
+          >
             Powered by the Oracle — real-time carbon intelligence
-          </p>
+          </motion.p>
       </div>
     </div>
   );

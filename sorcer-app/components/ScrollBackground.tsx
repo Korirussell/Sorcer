@@ -60,7 +60,7 @@ export function ScrollBackground() {
 
       {/* Floating magical particles */}
       <motion.div className="absolute inset-0 overflow-hidden" style={{ opacity: particleOpacity }}>
-        {Array.from({ length: 12 }).map((_, i) => (
+        {Array.from({ length: 5 }).map((_, i) => (
           <FloatingParticle key={i} index={i} />
         ))}
       </motion.div>

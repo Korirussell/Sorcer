@@ -9,6 +9,8 @@ import { ScrollBackground } from "@/components/ScrollBackground";
 import { PageTransition } from "@/components/PageTransition";
 import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
 import { OnboardingTour } from "@/components/OnboardingTour";
+import { MagicParticles } from "@/components/MagicParticles";
+import { CursorOrb } from "@/components/CursorOrb";
 
 const COLLAPSED_KEY = "sorcer-sidebar-collapsed";
 
@@ -34,6 +36,12 @@ export function LayoutClient({ children }: { children: React.ReactNode }) {
     <div className="relative min-h-screen bg-parchment">
       {/* Scroll-reactive background effects */}
       <ScrollBackground />
+
+      {/* Floating magic particles */}
+      <MagicParticles />
+
+      {/* Global cursor orb */}
+      <CursorOrb />
 
       {/* Keyboard shortcuts */}
       <KeyboardShortcuts onCloseSidebar={() => setIsSidebarOpen(false)} />

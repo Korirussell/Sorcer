@@ -351,6 +351,51 @@ function RealmMapInner() {
   const particleIdRef = useRef(0);
   const lastParticleTime = useRef(0);
 
+  // Zoom & Pan state
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+
+  const handleZoomIn = useCallback(() => setZoom((z) => Math.min(z + 0.25, 3)), []);
+  const handleZoomOut = useCallback(() => setZoom((z) => Math.max(z - 0.25, 1)), []);
+  const handleZoomReset = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, []);
+
+  // Mouse wheel zoom (Ctrl/Cmd held)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.15 : 0.15;
+      setZoom((z) => Math.min(Math.max(z + delta, 1), 3));
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, []);
+
+  // Pan handlers (click-and-drag when zoomed)
+  const handlePanStart = useCallback((e: React.MouseEvent) => {
+    if (zoom <= 1) return;
+    setIsPanning(true);
+    panStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+  }, [zoom, pan]);
+
+  const handlePanMove = useCallback((e: React.MouseEvent) => {
+    if (!isPanning) return;
+    const dx = e.clientX - panStart.current.x;
+    const dy = e.clientY - panStart.current.y;
+    setPan({ x: panStart.current.panX + dx, y: panStart.current.panY + dy });
+  }, [isPanning]);
+
+  const handlePanEnd = useCallback(() => setIsPanning(false), []);
+
+  // Reset pan when zoom returns to 1
+  useEffect(() => {
+    if (zoom <= 1) setPan({ x: 0, y: 0 });
+  }, [zoom]);
+
   // Fade out old particles
   useEffect(() => {
     const interval = setInterval(() => {
@@ -446,18 +491,26 @@ function RealmMapInner() {
           transformOrigin: "center center",
           boxShadow: `${-mousePos.x * 2}px ${-mousePos.y * 2}px 20px rgba(107,55,16,0.12)`,
           transition: "transform 0.15s ease-out, box-shadow 0.15s ease-out",
+          cursor: zoom > 1 ? (isPanning ? "grabbing" : "grab") : "default",
         }}
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.8, ease: "easeOut" }}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={() => { setTooltip(null); setMousePos({ x: 0, y: 0 }); }}
+        onMouseMove={(e) => { handleMouseMove(e); handlePanMove(e); }}
+        onMouseDown={handlePanStart}
+        onMouseUp={handlePanEnd}
+        onMouseLeave={() => { setTooltip(null); setMousePos({ x: 0, y: 0 }); handlePanEnd(); }}
       >
         <svg
           width="100%"
           height="100%"
           viewBox={`0 0 ${MAP_W} ${MAP_H}`}
           preserveAspectRatio="xMidYMid meet"
+          style={{
+            transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
+            transformOrigin: "center center",
+            transition: isPanning ? "none" : "transform 0.3s ease-out",
+          }}
         >
           {/* Coffee stain marks */}
           <circle cx={MAP_W * 0.08} cy={MAP_H * 0.85} r={25} fill="url(#coffee-stain)" />
@@ -481,8 +534,8 @@ function RealmMapInner() {
             if (!pt) return null;
             return (
               <text key={label.name} x={pt[0]} y={pt[1]} textAnchor="middle" fill="#6B3710"
-                fontSize="7" fontFamily="var(--font-sub)" fontStyle="italic"
-                opacity={label.name === "Here Be Dragons" ? 0.15 : 0.18}
+                fontSize="9" fontFamily="var(--font-sub)" fontStyle="italic"
+                opacity={label.name === "Here Be Dragons" ? 0.15 : 0.22}
                 transform={label.rotate ? `rotate(${label.rotate},${pt[0]},${pt[1]})` : undefined}>
                 {label.name}
               </text>
@@ -517,9 +570,9 @@ function RealmMapInner() {
                     <rect x={-2} y={-6} width={4} height={6} fill="#6B3710" rx={0.5} />
                   </g>
                 )}
-                <text x={pt[0]} y={pt[1] + 7} textAnchor="middle" fill={isGA ? "#4B6A4C" : "#6B3710"}
-                  fontSize={city.size === "large" ? "5.5" : "4"} fontFamily="var(--font-sub)" fontStyle="italic"
-                  opacity={isGA ? 0.5 : 0.22} fontWeight={isGA ? "bold" : "normal"}>
+                <text x={pt[0]} y={pt[1] + 9} textAnchor="middle" fill={isGA ? "#4B6A4C" : "#6B3710"}
+                  fontSize={city.size === "large" ? "8" : city.size === "medium" ? "6.5" : "5.5"} fontFamily="var(--font-sub)" fontStyle="italic"
+                  opacity={isGA ? 0.55 : 0.3} fontWeight={isGA ? "bold" : "normal"}>
                   {city.name}
                 </text>
               </g>
@@ -558,8 +611,8 @@ function RealmMapInner() {
             </g>
           )}
 
-          {/* ── Data Center Markers (foreground parallax layer) ── */}
-          <g style={{ transform: `translate(${mousePos.x * 1.5}px, ${mousePos.y * 1.5}px)` }}>
+          {/* ── Data Center Markers (STATIC — no parallax for clickability) ── */}
+          <g>
             {DATA_CENTERS.map((dc) => {
               const pt = dcPositions.get(dc.name);
               if (!pt) return null;
@@ -581,30 +634,30 @@ function RealmMapInner() {
                   style={{ cursor: "pointer" }}
                 >
                   {/* Outer pulse ring */}
-                  <motion.circle cx={x} cy={y} r={14} fill={color} opacity={0.08}
-                    animate={{ r: [14, 18, 14], opacity: [0.08, 0.03, 0.08] }}
+                  <motion.circle cx={x} cy={y} r={20} fill={color} opacity={0.08}
+                    animate={{ r: [20, 26, 20], opacity: [0.08, 0.03, 0.08] }}
                     transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
                   />
 
                   {/* Mid glow */}
-                  <circle cx={x} cy={y} r={9} fill={color} opacity={0.12} />
+                  <circle cx={x} cy={y} r={14} fill={color} opacity={0.12} />
 
                   {/* Core dot */}
-                  <motion.circle cx={x} cy={y} r={5} fill={color} stroke="#F7F3E8" strokeWidth={1.5}
-                    animate={{ r: [5, 5.8, 5] }}
+                  <motion.circle cx={x} cy={y} r={8} fill={color} stroke="#F7F3E8" strokeWidth={2}
+                    animate={{ r: [8, 9.2, 8] }}
                     transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                   />
 
                   {/* Score number inside dot */}
-                  <text x={x} y={y + 1.5} textAnchor="middle" fill="#F7F3E8" fontSize="4.5" fontWeight="bold" fontFamily="var(--font-code)">
+                  <text x={x} y={y + 2.5} textAnchor="middle" fill="#F7F3E8" fontSize="7" fontWeight="bold" fontFamily="var(--font-code)">
                     {dc.score}
                   </text>
 
                   {/* Label below */}
-                  <text x={x} y={y + 16} textAnchor="middle" fill="#6B3710" fontSize="6" fontFamily="var(--font-sub)" fontWeight="bold" opacity={0.6}>
+                  <text x={x} y={y + 20} textAnchor="middle" fill="#6B3710" fontSize="9" fontFamily="var(--font-sub)" fontWeight="bold" opacity={0.7}>
                     {dc.name}
                   </text>
-                  <text x={x} y={y + 23} textAnchor="middle" fill="#6B3710" fontSize="4" fontFamily="var(--font-sub)" opacity={0.3}>
+                  <text x={x} y={y + 29} textAnchor="middle" fill="#6B3710" fontSize="6" fontFamily="var(--font-sub)" opacity={0.35}>
                     {dc.provider}
                   </text>
                 </g>
@@ -665,10 +718,8 @@ function RealmMapInner() {
           {/* Title Cartouche */}
           <TitleCartouche x={MAP_W / 2} y={12} w={MAP_W} />
 
-          {/* Compass Rose */}
-          <g style={{ transform: `translate(${mousePos.x * 0.5}px, ${mousePos.y * 0.5}px)` }}>
-            <CompassRose x={MAP_W * 0.88} y={MAP_H * 0.82} />
-          </g>
+          {/* Compass Rose (STATIC) */}
+          <CompassRose x={MAP_W * 0.88} y={MAP_H * 0.82} />
 
           {/* Scale Bar */}
           <g transform={`translate(${MAP_W * 0.05},${MAP_H * 0.92})`} opacity={0.35}>
@@ -679,6 +730,35 @@ function RealmMapInner() {
           </g>
         </svg>
       </motion.div>
+      </div>
+
+      {/* Zoom Controls */}
+      <div className="absolute bottom-4 right-4 flex flex-col gap-1.5 z-10">
+        <button
+          onClick={handleZoomIn}
+          disabled={zoom >= 3}
+          className="w-8 h-8 rounded-lg bg-parchment border border-oak/15 text-oak hover:bg-parchment-dark transition-all duration-200 flex items-center justify-center text-sm font-mono shadow-sm disabled:opacity-30 disabled:cursor-not-allowed active:scale-95"
+          aria-label="Zoom in"
+        >
+          +
+        </button>
+        <button
+          onClick={handleZoomOut}
+          disabled={zoom <= 1}
+          className="w-8 h-8 rounded-lg bg-parchment border border-oak/15 text-oak hover:bg-parchment-dark transition-all duration-200 flex items-center justify-center text-sm font-mono shadow-sm disabled:opacity-30 disabled:cursor-not-allowed active:scale-95"
+          aria-label="Zoom out"
+        >
+          −
+        </button>
+        {zoom > 1 && (
+          <button
+            onClick={handleZoomReset}
+            className="w-8 h-8 rounded-lg bg-parchment border border-oak/15 text-oak hover:bg-parchment-dark transition-all duration-200 flex items-center justify-center text-[9px] font-sub shadow-sm active:scale-95"
+            aria-label="Reset zoom"
+          >
+            1×
+          </button>
+        )}
       </div>
 
       {/* Tooltip */}
