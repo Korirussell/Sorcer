@@ -24,11 +24,13 @@ const pageVariants = {
 
 function PageTransitionInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  // Use full URL as key to preserve query params
+  const key = typeof window !== 'undefined' ? window.location.href : pathname;
 
   return (
     <AnimatePresence mode="wait">
       <motion.div
-        key={pathname}
+        key={key}
         variants={pageVariants}
         initial="initial"
         animate="animate"

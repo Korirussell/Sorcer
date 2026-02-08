@@ -10,7 +10,7 @@ import { StatsTicker } from "@/components/StatsTicker";
 import { useEnergy } from "@/context/EnergyContext";
 import { generateUUID } from "@/lib/utils";
 import { getHealth } from "@/utils/api";
-import { getAllChats, seedIfEmpty, createChat } from "@/lib/localChatStore";
+import { getAllChats, seedIfEmpty, createChat, addMessage, type StoredMessage, type CarbonMeta } from "@/lib/localChatStore";
 
 function TiltCard({ children, className }: { children: React.ReactNode; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -128,8 +128,23 @@ export default function HomePage() {
       region: "auto",
     });
 
-    // Pass query via URL params — survives React Strict Mode double-mount
-    router.push(`/chat/${chatId}?query=${encodeURIComponent(prompt)}`);
+    // Save user message to localStorage so the chat page can detect it
+    const userMsg: StoredMessage = {
+      id: crypto.randomUUID(),
+      chatId,
+      role: "user",
+      content: prompt,
+      createdAt: new Date().toISOString(),
+      carbon: {
+        cost_g: 0, baseline_g: 0, saved_g: 0, model: "", region: "", cfe_percent: 0,
+        tokens_in: prompt.split(/\s+/).length, tokens_out: 0, latency_ms: 0,
+        cached: false, cache_hit_tokens: 0, compressed: false,
+        original_tokens: 0, compressed_tokens: 0, compression_ratio: 1,
+      } as CarbonMeta,
+    };
+    addMessage(userMsg);
+    
+    router.push(`/chat/${chatId}`);
   };
 
   const features = [
