@@ -10,6 +10,7 @@ pydantic-settings
 
 # --- AI & Orchestration ---
 google-cloud-aiplatform>=1.60
+vertexai
 anthropic[vertex]>=0.40
 langgraph
 tiktoken

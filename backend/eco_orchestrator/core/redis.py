@@ -1,10 +1,16 @@
 # ============================================================================
-# Redis Cache Wrapper Class - DISABLED
+# Redis Cache Wrapper Class
 # ============================================================================
 
 import json
 from typing import Any, Optional
 from loguru import logger
+
+try:
+    import redis
+    _HAS_REDIS = True
+except ImportError:
+    _HAS_REDIS = False
 
 
 class RedisCache:
@@ -41,7 +47,22 @@ class RedisCache:
         """
         self.default_ttl = default_ttl
         self.redis_client = None
-        logger.info("✓ Redis cache disabled (no-op mode)")
+        if _HAS_REDIS:
+            try:
+                self.redis_client = redis.Redis(
+                    host=host,
+                    port=port,
+                    db=db,
+                    password=password,
+                    decode_responses=True,
+                )
+                self.redis_client.ping()
+                logger.info(f"✓ Redis connected ({host}:{port})")
+            except Exception as e:
+                self.redis_client = None
+                logger.warning(f"Redis disabled (no-op mode): {e}")
+        else:
+            logger.info("✓ Redis cache disabled (no-op mode, redis not installed)")
     
     def exists(self, key: str) -> bool:
         """
@@ -57,7 +78,7 @@ class RedisCache:
             return False
         try:
             return self.redis_client.exists(key) > 0
-        except redis.RedisError as e:
+        except Exception as e:
             logger.error(f"Error checking cache key '{key}': {e}")
             return False
     
@@ -85,7 +106,7 @@ class RedisCache:
             except json.JSONDecodeError:
                 # Return as-is if not valid JSON
                 return value
-        except redis.RedisError as e:
+        except Exception as e:
             logger.error(f"Error retrieving key '{key}' from cache: {e}")
             return None
     
@@ -125,7 +146,7 @@ class RedisCache:
             
             logger.debug(f"✓ Cached key '{key}' (TTL: {cache_ttl}s)")
             return True
-        except redis.RedisError as e:
+        except Exception as e:
             logger.error(f"Error setting cache key '{key}': {e}")
             return False
     
@@ -144,7 +165,7 @@ class RedisCache:
         try:
             deleted = self.redis_client.delete(key)
             return deleted > 0
-        except redis.RedisError as e:
+        except Exception as e:
             logger.error(f"Error deleting cache key '{key}': {e}")
             return False
     
@@ -161,7 +182,7 @@ class RedisCache:
             self.redis_client.flushdb()
             logger.info("✓ Cache cleared")
             return True
-        except redis.RedisError as e:
+        except Exception as e:
             logger.error(f"Error clearing cache: {e}")
             return False
     
@@ -179,7 +200,7 @@ class RedisCache:
             return []
         try:
             return self.redis_client.keys(pattern)
-        except redis.RedisError as e:
+        except Exception as e:
             logger.error(f"Error retrieving keys: {e}")
             return []
     
@@ -190,6 +211,6 @@ class RedisCache:
         try:
             self.redis_client.close()
             logger.info("✓ Redis connection closed")
-        except redis.RedisError as e:
+        except Exception as e:
             logger.error(f"Error closing connection: {e}")
 

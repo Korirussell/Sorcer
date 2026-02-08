@@ -5,7 +5,7 @@ Shows what we do to the prompt and the final answer.
   cd backend/eco_orchestrator
   python scripts/test_flow.py
 
-With real LLM: set GOOGLE_API_KEY in .env.
+With real LLM: set Vertex AI (GOOGLE_APPLICATION_CREDENTIALS, GOOGLE_CLOUD_PROJECT) or GOOGLE_API_KEY in .env.
 With mock LLM (no key/quota needed): set TEST_FLOW_MOCK_LLM=1 in env or .env.
 No Redis or Postgres required.
 """
@@ -86,8 +86,20 @@ async def main():
     return result
 
 
+def _has_llm_creds() -> bool:
+    mock = os.getenv("TEST_FLOW_MOCK_LLM", "").strip() in ("1", "true", "yes")
+    if mock:
+        return True
+    if os.getenv("GOOGLE_API_KEY"):
+        return True
+    creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    project = os.getenv("GOOGLE_CLOUD_PROJECT")
+    return bool(creds and project)
+
+
 if __name__ == "__main__":
-    if not os.getenv("GOOGLE_API_KEY") and os.getenv("TEST_FLOW_MOCK_LLM", "").strip() not in ("1", "true", "yes"):
-        print("ERROR: Set GOOGLE_API_KEY in .env, or set TEST_FLOW_MOCK_LLM=1 to run with mock LLM.")
+    if not _has_llm_creds():
+        print("ERROR: Set Vertex AI (GOOGLE_APPLICATION_CREDENTIALS, GOOGLE_CLOUD_PROJECT) or GOOGLE_API_KEY, "
+              "or TEST_FLOW_MOCK_LLM=1 for mock.")
         sys.exit(1)
     asyncio.run(main())

@@ -335,10 +335,35 @@ def build_region_snapshot(
     return snapshot
 
 
+def _watttime_only_snapshot(wt_region: str) -> dict | None:
+    """
+    Fallback: build a minimal snapshot from WattTime only when Electricity Maps fails.
+    """
+    wt_raw = fetch_watttime_raw(wt_region)
+    if not wt_raw:
+        return None
+    parsed = parse_watttime_response(wt_raw)
+    regions = parsed.get("regions", [])
+    if not regions:
+        return None
+    r = regions[0]
+    intensity = r.get("intensity_g_per_kwh")
+    return {
+        "zone": wt_region,
+        "carbon_intensity_g_per_kwh": intensity,
+        "fetched_at": _now_iso(),
+        "watttime_region": wt_region,
+        "watttime_percentile": r.get("percentile"),
+        "watttime_moer_lbs_per_mwh": r.get("moer_lbs_per_mwh"),
+        "watttime_co2_g_per_kwh": intensity,
+        "provider": "watttime_only",
+    }
+
+
 def fetch_region_snapshot(em_zone: str, wt_region: str) -> dict:
     """
     One-call convenience: fetch both APIs for a region and return
-    the combined Redis-ready snapshot.
+    the combined Redis-ready snapshot. Falls back to WattTime-only when EM fails.
     """
     wt_token = _get_watttime_token()
 
@@ -347,7 +372,13 @@ def fetch_region_snapshot(em_zone: str, wt_region: str) -> dict:
     wt_idx = fetch_watttime_index(wt_region, wt_token)
     wt_fc = fetch_watttime_forecast(wt_region, wt_token)
 
-    return build_region_snapshot(em_ci, em_pb, wt_idx, wt_fc)
+    snapshot = build_region_snapshot(em_ci, em_pb, wt_idx, wt_fc)
+    # If EM returned no carbon_intensity but we have WattTime, use WattTime-only fallback
+    if snapshot.get("carbon_intensity_g_per_kwh") is None and snapshot.get("watttime_percentile") is None:
+        fallback = _watttime_only_snapshot(wt_region)
+        if fallback:
+            return fallback
+    return snapshot
 
 
 def _now_iso() -> str:

@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from core.orchestrator import EcoOrchestrator
 from core.receipt_store import set_receipt as store_receipt
+from core.grid_engine import get_default_grid_data
 
 router = APIRouter(tags=["action"])
 orchestrator = EcoOrchestrator()
@@ -74,7 +75,9 @@ async def deferred_execute(task_id: str):
         raise HTTPException(status_code=503, detail="LLM call failed")
 
     comp = orchestrator.compressor.compress(prompt_text)
-    grid_intensity = 100.0
+    grid_data = get_default_grid_data()
+    grid_intensity = grid_data["carbon_intensity_g_per_kwh"]
+    grid_source = grid_data["grid_source"]
     impact = orchestrator.logger.calculate_savings(
         {
             "original_tokens": comp["original_count"],
@@ -101,7 +104,7 @@ async def deferred_execute(task_id: str):
             "net_savings": impact.get("co2_saved_grams", 2.4),
             "was_cached": False,
             "energy_kwh": impact.get("energy_kwh", 0.004),
-            "grid_source": {"wind": 60, "solar": 22, "gas": 18},
+            "grid_source": grid_source,
         },
     )
 

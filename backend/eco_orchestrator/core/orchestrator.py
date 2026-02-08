@@ -7,6 +7,7 @@ from core.logger import GreenLogger
 from core.cache import check_if_prompt_is_in_cache, add_prompt_to_cache
 from core.database import EcoDatabase
 from core.receipt_store import set_receipt as store_receipt
+from core.grid_engine import get_default_grid_data
 
 
 class EcoOrchestrator:
@@ -46,8 +47,10 @@ class EcoOrchestrator:
         triage = self.scorer.score(comp["compressed_text"])
         tier = "gemini-2.0-flash"  # cheapest (new API); revert to triage["tier"] for production
 
-        # 3: Grid + optional deferral (non-fatal: if DB unavailable, run immediately)
-        grid_intensity = 100.0  # Placeholder – below threshold so we run now until real grid infra
+        # 3: Grid + optional deferral (data-driven: cache + API, fallback when APIs fail)
+        grid_data = get_default_grid_data()
+        grid_intensity = grid_data["carbon_intensity_g_per_kwh"]
+        grid_source = grid_data["grid_source"]
         GRID_THRESHOLD = 200
         deadline = getattr(req, "deadline", None) or (datetime.utcnow() + timedelta(hours=24))
         if not getattr(req, "is_urgent", False) and grid_intensity > GRID_THRESHOLD:
@@ -88,7 +91,7 @@ class EcoOrchestrator:
                 "net_savings": impact.get("co2_saved_grams", 2.4),
                 "was_cached": False,
                 "energy_kwh": impact.get("energy_kwh", 0.004),
-                "grid_source": {"wind": 60, "solar": 22, "gas": 18},
+                "grid_source": grid_source,
             },
         )
 
