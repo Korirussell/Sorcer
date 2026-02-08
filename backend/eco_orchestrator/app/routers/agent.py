@@ -1,13 +1,14 @@
 # Agent: Carbon-Aware Planning Sandbox
-# POST /agent/plan    — single-shot green execution strategy.
-# POST /agent/project — multi-step agentic project planner.
-# These endpoints NEVER call an LLM.  They only return PLANs.
+# POST /agent/plan         — single-shot green execution strategy.
+# POST /agent/project      — multi-step agentic project planner.
+# POST /agent/execute-step — actually run a planned step through the LLM.
 
 from __future__ import annotations
 
 import hashlib
 import math
 import random
+import time
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
@@ -19,6 +20,7 @@ from core.grid_engine import (
     get_default_grid_data,
     DEFAULT_EM_ZONE,
 )
+from core.llm_client import LLMClient
 
 # ---------------------------------------------------------------------------
 # Router
@@ -522,8 +524,35 @@ class AgentPlanner:
         return f"in ~{hours / 24:.1f} days"
 
 
-# Singleton planner
+# ---------------------------------------------------------------------------
+# Pydantic Schemas — step execution (/execute-step)
+# ---------------------------------------------------------------------------
+
+
+class ExecuteStepRequest(BaseModel):
+    """Input: which step to run and with what prompt / model."""
+
+    prompt: str = Field(..., min_length=1, description="The LLM prompt for this step")
+    model_choice: str = Field(..., description="Model identifier to use")
+    step_number: int = Field(..., ge=1, description="1-based step index (for tracking)")
+    title: str = Field("", description="Step title (echoed back for convenience)")
+
+
+class ExecuteStepResponse(BaseModel):
+    """Output: the LLM's actual response plus carbon accounting."""
+
+    step_number: int
+    title: str
+    model_used: str
+    output: str = Field(..., description="Raw LLM response text")
+    elapsed_ms: int = Field(..., description="Wall-clock time for the LLM call")
+    estimated_carbon_g: float = Field(..., description="Estimated CO2 for this call")
+    executed_at: str = Field(..., description="ISO-8601 timestamp of execution")
+
+
+# Singleton planner + LLM client
 _planner = AgentPlanner()
+_llm = LLMClient()
 
 
 # ---------------------------------------------------------------------------
@@ -554,3 +583,73 @@ def create_project_plan(req: ProjectRequest):
     and reasoning trace.  No LLM calls are made.
     """
     return _planner.generate_project(req)
+
+
+# Map catalogue display names → real Vertex AI model IDs.
+# If a name already matches a real ID it passes through unchanged.
+_MODEL_ALIAS: dict[str, str] = {
+    "claude-3.5-sonnet": "gemini-2.5-flash",
+    "claude-3-haiku": "gemini-2.0-flash",
+    "gpt-4o-mini": "gemini-2.0-flash",
+    "gemini-1.5-pro": "gemini-2.5-pro",
+}
+_FALLBACK_MODEL = "gemini-2.0-flash"
+
+
+@router.post("/execute-step", response_model=ExecuteStepResponse)
+async def execute_step(req: ExecuteStepRequest):
+    """
+    **Execute a planned step** — sends the step's prompt to the recommended
+    LLM and returns the real response with carbon accounting.
+    """
+    # Resolve catalogue name → real Vertex AI model ID
+    requested = req.model_choice or _FALLBACK_MODEL
+    model = _MODEL_ALIAS.get(requested, requested)
+
+    start = time.perf_counter()
+    try:
+        output = await _llm.generate(prompt=req.prompt, model_name=model)
+    except Exception as exc:
+        # If the resolved model still fails, retry with the safe fallback
+        if model != _FALLBACK_MODEL:
+            try:
+                model = _FALLBACK_MODEL
+                output = await _llm.generate(prompt=req.prompt, model_name=model)
+            except Exception as exc2:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"LLM call failed ({model}): {exc2}",
+                ) from exc2
+        else:
+            raise HTTPException(
+                status_code=502,
+                detail=f"LLM call failed ({model}): {exc}",
+            ) from exc
+    elapsed_ms = int((time.perf_counter() - start) * 1000)
+
+    # Rough carbon estimate: tokens × energy × grid intensity
+    grid = get_default_grid_data()
+    intensity = grid.get("carbon_intensity_g_per_kwh", 420.0)
+
+    # Estimate tokens from prompt + output length
+    prompt_tokens = max(1, len(req.prompt.split()) * 1.3)
+    output_tokens = max(1, len(output.split()) * 1.3)
+    total_tokens = int(prompt_tokens + output_tokens)
+
+    # Find energy per token for the model used
+    model_entry = next(
+        (m for m in _MODEL_CATALOGUE if m["name"] == model),
+        {"energy_kwh_per_1k_tok": 0.001},
+    )
+    kwh_per_tok = model_entry["energy_kwh_per_1k_tok"] / 1000
+    estimated_carbon_g = round(total_tokens * kwh_per_tok * intensity, 4)
+
+    return ExecuteStepResponse(
+        step_number=req.step_number,
+        title=req.title,
+        model_used=model,
+        output=output,
+        elapsed_ms=elapsed_ms,
+        estimated_carbon_g=estimated_carbon_g,
+        executed_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    )

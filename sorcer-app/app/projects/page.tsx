@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FlaskConical,
@@ -17,10 +17,54 @@ import {
   ArrowRight,
   Loader2,
   AlertCircle,
+  Play,
+  CheckCircle2,
+  Copy,
+  Check,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
-import { postAgentProject } from "@/utils/api";
-import type { ProjectPlan, StepPlan } from "@/utils/api";
+import { postAgentProject, postExecuteStep } from "@/utils/api";
+import type { ProjectPlan, StepPlan, ExecuteStepResponse } from "@/utils/api";
+
+// ─── Persistence ────────────────────────────────────────────────────────
+
+const STORAGE_KEY = "sorcer-agentic-projects";
+const RESULTS_KEY = "sorcer-agentic-results";
+
+/** Stored results are keyed by "planName::stepNumber" */
+type ResultsMap = Record<string, ExecuteStepResponse>;
+
+function loadPlans(): ProjectPlan[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as ProjectPlan[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePlans(plans: ProjectPlan[]) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(plans)); } catch {}
+}
+
+function loadResults(): ResultsMap {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(RESULTS_KEY);
+    return raw ? (JSON.parse(raw) as ResultsMap) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveResults(results: ResultsMap) {
+  try { localStorage.setItem(RESULTS_KEY, JSON.stringify(results)); } catch {}
+}
+
+function resultKey(planName: string, planIdx: number, stepNum: number): string {
+  return `${planName}::${planIdx}::${stepNum}`;
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -60,10 +104,31 @@ const PHASE_ICONS: Record<string, typeof FlaskConical> = {
 
 // ─── Step Card ──────────────────────────────────────────────────────────
 
-function StepCard({ step, totalCarbon }: { step: StepPlan; totalCarbon: number }) {
+function StepCard({
+  step,
+  totalCarbon,
+  result,
+  executing,
+  onExecute,
+}: {
+  step: StepPlan;
+  totalCarbon: number;
+  result: ExecuteStepResponse | null;
+  executing: boolean;
+  onExecute: () => void;
+}) {
   const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const Icon = PHASE_ICONS[step.title] || FlaskConical;
   const share = totalCarbon > 0 ? (step.estimated_carbon_g / totalCarbon) * 100 : 0;
+  const isDone = !!result;
+
+  const handleCopy = () => {
+    if (!result) return;
+    navigator.clipboard.writeText(result.output);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <motion.div
@@ -71,53 +136,93 @@ function StepCard({ step, totalCarbon }: { step: StepPlan; totalCarbon: number }
       initial={{ opacity: 0, x: -16 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.35, delay: step.step_number * 0.08 }}
-      className="specimen-card overflow-hidden"
+      className={`specimen-card overflow-hidden ${isDone ? "border-l-2 border-l-moss" : ""}`}
     >
       {/* Header */}
-      <button
+      <div
         onClick={() => setOpen((o) => !o)}
-        className="w-full text-left px-5 py-4 flex items-center gap-3 hover:bg-oak/3 transition-colors"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setOpen((o) => !o); }}
+        className="w-full text-left px-5 py-4 flex items-center gap-3 hover:bg-oak/3 transition-colors cursor-pointer"
       >
         {/* Step number badge */}
-        <div className="w-8 h-8 rounded-xl bg-moss/12 flex items-center justify-center shrink-0 border border-moss/20">
-          <span className="text-xs font-header text-moss">{step.step_number}</span>
+        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
+          isDone
+            ? "bg-moss/20 border-moss/30"
+            : executing
+            ? "bg-topaz/20 border-topaz/30"
+            : "bg-moss/12 border-moss/20"
+        }`}>
+          {isDone ? (
+            <CheckCircle2 className="w-4 h-4 text-moss" />
+          ) : executing ? (
+            <Loader2 className="w-4 h-4 text-topaz animate-spin" />
+          ) : (
+            <span className="text-xs font-header text-moss">{step.step_number}</span>
+          )}
         </div>
 
         <Icon className="w-4 h-4 text-oak/40 shrink-0" />
 
         <div className="flex-1 min-w-0">
           <h4 className="text-sm font-medium text-oak truncate">{step.title}</h4>
-          <p className="text-[10px] text-oak/40 truncate mt-0.5">{step.description}</p>
+          <p className="text-[10px] text-oak/40 truncate mt-0.5">
+            {isDone ? `Completed in ${(result.elapsed_ms / 1000).toFixed(1)}s — ${carbonLabel(result.estimated_carbon_g)} CO₂` : step.description}
+          </p>
         </div>
 
         {/* Right side stats */}
         <div className="hidden sm:flex items-center gap-4 shrink-0">
           <div className="text-right">
             <span className="text-[10px] text-oak/30 block">Carbon</span>
-            <span className="text-xs font-medium text-moss tabular-nums">{carbonLabel(step.estimated_carbon_g)}</span>
+            <span className="text-xs font-medium text-moss tabular-nums">{carbonLabel(isDone ? result.estimated_carbon_g : step.estimated_carbon_g)}</span>
           </div>
           <div className="text-right">
-            <span className="text-[10px] text-oak/30 block">Schedule</span>
-            <span className="text-[11px] font-medium text-topaz tabular-nums">{formatWindow(step.scheduled_window)}</span>
+            <span className="text-[10px] text-oak/30 block">{isDone ? "Ran at" : "Schedule"}</span>
+            <span className="text-[11px] font-medium text-topaz tabular-nums">{formatWindow(isDone ? result.executed_at : step.scheduled_window)}</span>
           </div>
           <div className="text-right">
             <span className="text-[10px] text-oak/30 block">Model</span>
-            <span className="text-[11px] font-mono text-oak/60">{step.model_choice}</span>
+            <span className="text-[11px] font-mono text-oak/60">{isDone ? result.model_used : step.model_choice}</span>
           </div>
         </div>
+
+        {/* Execute button or status */}
+        {!isDone && !executing && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onExecute(); }}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-moss/15 text-moss text-xs font-medium border border-moss/25 hover:bg-moss/25 transition-all active:scale-95"
+            title="Execute this step"
+          >
+            <Play className="w-3 h-3" />
+            Go
+          </button>
+        )}
+
+        {executing && (
+          <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-topaz/10 text-topaz text-xs font-medium border border-topaz/20">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Running
+          </div>
+        )}
+
+        {isDone && !open && (
+          <CheckCircle2 className="w-4 h-4 text-moss shrink-0" />
+        )}
 
         {open ? (
           <ChevronDown className="w-4 h-4 text-oak/30 shrink-0" />
         ) : (
           <ChevronRight className="w-4 h-4 text-oak/30 shrink-0" />
         )}
-      </button>
+      </div>
 
       {/* Carbon share bar */}
       <div className="px-5 pb-1">
         <div className="h-1 rounded-full bg-oak/8 overflow-hidden">
           <motion.div
-            className="h-full rounded-full bg-moss/50"
+            className={`h-full rounded-full ${isDone ? "bg-moss/70" : "bg-moss/50"}`}
             initial={{ width: 0 }}
             animate={{ width: `${share}%` }}
             transition={{ duration: 0.6, delay: step.step_number * 0.1 }}
@@ -144,17 +249,45 @@ function StepCard({ step, totalCarbon }: { step: StepPlan; totalCarbon: number }
               <div className="sm:hidden grid grid-cols-3 gap-2">
                 <div>
                   <span className="text-[10px] text-oak/30 block">Carbon</span>
-                  <span className="text-xs font-medium text-moss">{carbonLabel(step.estimated_carbon_g)}</span>
+                  <span className="text-xs font-medium text-moss">{carbonLabel(isDone ? result.estimated_carbon_g : step.estimated_carbon_g)}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-oak/30 block">Schedule</span>
-                  <span className="text-[11px] font-medium text-topaz">{formatWindow(step.scheduled_window)}</span>
+                  <span className="text-[10px] text-oak/30 block">{isDone ? "Ran at" : "Schedule"}</span>
+                  <span className="text-[11px] font-medium text-topaz">{formatWindow(isDone ? result.executed_at : step.scheduled_window)}</span>
                 </div>
                 <div>
                   <span className="text-[10px] text-oak/30 block">Model</span>
-                  <span className="text-[11px] font-mono text-oak/60">{step.model_choice}</span>
+                  <span className="text-[11px] font-mono text-oak/60">{isDone ? result.model_used : step.model_choice}</span>
                 </div>
               </div>
+
+              {/* ─── LLM Result ─── */}
+              {isDone && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <h5 className="text-[10px] text-moss uppercase tracking-wider font-medium">LLM Output</h5>
+                    <button
+                      onClick={handleCopy}
+                      className="flex items-center gap-1 text-[10px] text-oak/30 hover:text-oak/60 transition-colors"
+                    >
+                      {copied ? <Check className="w-3 h-3 text-moss" /> : <Copy className="w-3 h-3" />}
+                      {copied ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <div className="enchanted-terminal p-4 text-[11px] leading-relaxed max-h-64 overflow-y-auto whitespace-pre-wrap">
+                    {result.output}
+                  </div>
+                  <div className="flex items-center gap-4 mt-2 text-[10px] text-oak/30">
+                    <span>Model: <span className="text-oak/50 font-mono">{result.model_used}</span></span>
+                    <span>Time: <span className="text-oak/50">{(result.elapsed_ms / 1000).toFixed(1)}s</span></span>
+                    <span>Carbon: <span className="text-moss">{carbonLabel(result.estimated_carbon_g)}</span></span>
+                  </div>
+                </motion.div>
+              )}
 
               {/* Reasoning trace */}
               <div>
@@ -175,13 +308,26 @@ function StepCard({ step, totalCarbon }: { step: StepPlan; totalCarbon: number }
                 </div>
               </div>
 
-              {/* LLM prompt preview */}
-              <div>
-                <h5 className="text-[10px] text-oak/40 uppercase tracking-wider mb-1.5">Planned Prompt</h5>
-                <div className="enchanted-terminal p-3 text-[11px] leading-relaxed max-h-32 overflow-y-auto">
-                  {step.prompt}
+              {/* LLM prompt preview (only when NOT executed yet) */}
+              {!isDone && (
+                <div>
+                  <h5 className="text-[10px] text-oak/40 uppercase tracking-wider mb-1.5">Planned Prompt</h5>
+                  <div className="enchanted-terminal p-3 text-[11px] leading-relaxed max-h-32 overflow-y-auto">
+                    {step.prompt}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* Execute button inside expanded view too */}
+              {!isDone && !executing && (
+                <button
+                  onClick={onExecute}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-moss/15 text-moss text-sm font-medium border border-moss/25 hover:bg-moss/25 transition-all active:scale-[0.98]"
+                >
+                  <Play className="w-4 h-4" />
+                  Execute Step {step.step_number}
+                </button>
+              )}
             </div>
           </motion.div>
         )}
@@ -192,11 +338,26 @@ function StepCard({ step, totalCarbon }: { step: StepPlan; totalCarbon: number }
 
 // ─── Plan Display ───────────────────────────────────────────────────────
 
-function PlanDisplay({ plan }: { plan: ProjectPlan }) {
+function PlanDisplay({
+  plan,
+  planIdx,
+  results,
+  executingStep,
+  onExecuteStep,
+}: {
+  plan: ProjectPlan;
+  planIdx: number;
+  results: ResultsMap;
+  executingStep: number | null;
+  onExecuteStep: (step: StepPlan) => void;
+}) {
   const savingsPct = plan.total_estimated_carbon_g > 0
     ? ((plan.total_savings_g / (plan.total_estimated_carbon_g + plan.total_savings_g)) * 100)
     : 0;
   const withinBudget = plan.total_estimated_carbon_g <= plan.carbon_limit_g;
+  const completedCount = plan.steps.filter(
+    (s) => !!results[resultKey(plan.name, planIdx, s.step_number)]
+  ).length;
 
   return (
     <motion.div
@@ -211,7 +372,11 @@ function PlanDisplay({ plan }: { plan: ProjectPlan }) {
           <Sparkles className="w-4 h-4 text-topaz" />
           <h3 className="text-lg font-header text-oak">{plan.name}</h3>
           <span className="ml-auto text-[10px] font-medium text-moss bg-moss/10 px-2 py-0.5 rounded-full border border-moss/20">
-            {plan.status}
+            {completedCount === plan.steps.length
+              ? "completed"
+              : completedCount > 0
+              ? `${completedCount}/${plan.steps.length} done`
+              : plan.status}
           </span>
         </div>
 
@@ -285,7 +450,7 @@ function PlanDisplay({ plan }: { plan: ProjectPlan }) {
       <div className="flex items-center gap-2 mb-1">
         <FlaskConical className="w-4 h-4 text-oak/40" />
         <h3 className="text-sm font-medium text-oak">Execution Steps</h3>
-        <span className="text-[10px] text-oak/30">{plan.steps.length} phases</span>
+        <span className="text-[10px] text-oak/30">{completedCount}/{plan.steps.length} complete</span>
       </div>
 
       {/* Timeline connector */}
@@ -293,15 +458,26 @@ function PlanDisplay({ plan }: { plan: ProjectPlan }) {
         {/* Vertical timeline line */}
         <div className="absolute left-[1.05rem] top-4 bottom-4 w-px bg-oak/10" />
 
-        {plan.steps.map((step) => (
-          <div key={step.step_number} className="relative">
-            {/* Timeline dot */}
-            <div className="absolute -left-0.5 top-5 w-2.5 h-2.5 rounded-full bg-moss border-2 border-parchment z-10" />
-            <div className="ml-4">
-              <StepCard step={step} totalCarbon={plan.total_estimated_carbon_g} />
+        {plan.steps.map((step) => {
+          const key = resultKey(plan.name, planIdx, step.step_number);
+          return (
+            <div key={step.step_number} className="relative">
+              {/* Timeline dot */}
+              <div className={`absolute -left-0.5 top-5 w-2.5 h-2.5 rounded-full border-2 border-parchment z-10 ${
+                results[key] ? "bg-moss" : executingStep === step.step_number ? "bg-topaz animate-pulse" : "bg-oak/20"
+              }`} />
+              <div className="ml-4">
+                <StepCard
+                  step={step}
+                  totalCarbon={plan.total_estimated_carbon_g}
+                  result={results[key] || null}
+                  executing={executingStep === step.step_number}
+                  onExecute={() => onExecuteStep(step)}
+                />
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </motion.div>
   );
@@ -467,13 +643,63 @@ function CreateProjectForm({ onCreated }: { onCreated: (plan: ProjectPlan) => vo
 
 export default function ProjectsPage() {
   const [plans, setPlans] = useState<ProjectPlan[]>([]);
-  const [activePlan, setActivePlan] = useState<ProjectPlan | null>(null);
+  const [activePlanIdx, setActivePlanIdx] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(true);
+  const [results, setResults] = useState<ResultsMap>({});
+  const [executingStep, setExecutingStep] = useState<number | null>(null);
+  const [execError, setExecError] = useState<string | null>(null);
+
+  // Hydrate from localStorage on mount
+  useEffect(() => {
+    const stored = loadPlans();
+    const storedResults = loadResults();
+    if (stored.length > 0) {
+      setPlans(stored);
+      setShowForm(false);
+    }
+    if (Object.keys(storedResults).length > 0) {
+      setResults(storedResults);
+    }
+  }, []);
+
+  const persistPlans = useCallback((next: ProjectPlan[]) => {
+    setPlans(next);
+    savePlans(next);
+  }, []);
+
+  const persistResults = useCallback((next: ResultsMap) => {
+    setResults(next);
+    saveResults(next);
+  }, []);
 
   const handleCreated = (plan: ProjectPlan) => {
-    setPlans((prev) => [plan, ...prev]);
-    setActivePlan(plan);
+    const next = [plan, ...plans];
+    persistPlans(next);
+    setActivePlanIdx(0);
     setShowForm(false);
+  };
+
+  const activePlan = activePlanIdx !== null ? plans[activePlanIdx] : null;
+
+  const handleExecuteStep = async (step: StepPlan) => {
+    if (!activePlan || activePlanIdx === null) return;
+    setExecutingStep(step.step_number);
+    setExecError(null);
+    try {
+      const res = await postExecuteStep({
+        prompt: step.prompt,
+        model_choice: step.model_choice,
+        step_number: step.step_number,
+        title: step.title,
+      });
+      const key = resultKey(activePlan.name, activePlanIdx, step.step_number);
+      const next = { ...results, [key]: res };
+      persistResults(next);
+    } catch (err: unknown) {
+      setExecError(err instanceof Error ? err.message : "Execution failed — check backend logs.");
+    } finally {
+      setExecutingStep(null);
+    }
   };
 
   return (
@@ -481,7 +707,7 @@ export default function ProjectsPage() {
       <PageHeader title="Agentic Projects" subtitle="Carbon-aware multi-step execution planning" />
 
       {/* Toggle between form and plan list */}
-      {!showForm && !activePlan && plans.length > 0 && (
+      {!showForm && activePlanIdx === null && plans.length > 0 && (
         <motion.button
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -506,16 +732,32 @@ export default function ProjectsPage() {
         )}
       </AnimatePresence>
 
+      {/* Execution error banner */}
+      <AnimatePresence>
+        {execError && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="mb-4 flex items-center gap-2 px-4 py-3 rounded-xl bg-witchberry/8 border border-witchberry/20 text-witchberry text-xs"
+          >
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span className="flex-1">{execError}</span>
+            <button onClick={() => setExecError(null)} className="text-witchberry/40 hover:text-witchberry">✕</button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Active plan detail */}
       <AnimatePresence mode="wait">
-        {activePlan && (
+        {activePlan && activePlanIdx !== null && (
           <motion.div
-            key={activePlan.name}
+            key={`plan-${activePlanIdx}`}
             exit={{ opacity: 0, y: 12 }}
           >
             <div className="flex items-center justify-between mb-4">
               <button
-                onClick={() => { setActivePlan(null); setShowForm(false); }}
+                onClick={() => { setActivePlanIdx(null); setShowForm(false); setExecError(null); }}
                 className="text-xs text-oak/40 hover:text-oak transition-colors"
               >
                 ← All Projects
@@ -528,44 +770,63 @@ export default function ProjectsPage() {
                 New
               </button>
             </div>
-            <PlanDisplay plan={activePlan} />
+            <PlanDisplay
+              plan={activePlan}
+              planIdx={activePlanIdx}
+              results={results}
+              executingStep={executingStep}
+              onExecuteStep={handleExecuteStep}
+            />
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Plan list (when no active plan and form is hidden) */}
-      {!activePlan && !showForm && plans.length > 0 && (
+      {activePlanIdx === null && !showForm && plans.length > 0 && (
         <div className="space-y-3">
-          {plans.map((plan, i) => (
-            <motion.button
-              key={`${plan.name}-${i}`}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              onClick={() => setActivePlan(plan)}
-              className="w-full text-left specimen-card p-4 hover:shadow-lg transition-all"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-moss/10 flex items-center justify-center shrink-0 border border-moss/15">
-                  <FlaskConical className="w-4 h-4 text-moss" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-medium text-oak truncate">{plan.name}</h4>
-                  <div className="flex items-center gap-3 mt-0.5">
-                    <span className="text-[10px] text-moss font-medium">{carbonLabel(plan.total_estimated_carbon_g)}</span>
-                    <span className="text-[10px] text-oak/30">{plan.steps.length} steps</span>
-                    <span className="text-[10px] text-topaz">{formatWindow(plan.deadline)}</span>
+          {plans.map((plan, i) => {
+            const completedCount = plan.steps.filter(
+              (s) => !!results[resultKey(plan.name, i, s.step_number)]
+            ).length;
+            return (
+              <motion.button
+                key={`${plan.name}-${i}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
+                onClick={() => setActivePlanIdx(i)}
+                className="w-full text-left specimen-card p-4 hover:shadow-lg transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                    completedCount === plan.steps.length
+                      ? "bg-moss/15 border-moss/20"
+                      : "bg-moss/10 border-moss/15"
+                  }`}>
+                    {completedCount === plan.steps.length ? (
+                      <CheckCircle2 className="w-4 h-4 text-moss" />
+                    ) : (
+                      <FlaskConical className="w-4 h-4 text-moss" />
+                    )}
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-medium text-oak truncate">{plan.name}</h4>
+                    <div className="flex items-center gap-3 mt-0.5">
+                      <span className="text-[10px] text-moss font-medium">{carbonLabel(plan.total_estimated_carbon_g)}</span>
+                      <span className="text-[10px] text-oak/30">{completedCount}/{plan.steps.length} steps done</span>
+                      <span className="text-[10px] text-topaz">{formatWindow(plan.deadline)}</span>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-oak/20 shrink-0" />
                 </div>
-                <ChevronRight className="w-4 h-4 text-oak/20 shrink-0" />
-              </div>
-            </motion.button>
-          ))}
+              </motion.button>
+            );
+          })}
         </div>
       )}
 
       {/* Empty state */}
-      {!activePlan && !showForm && plans.length === 0 && (
+      {activePlanIdx === null && !showForm && plans.length === 0 && (
         <motion.div
           className="specimen-card p-10 text-center"
           initial={{ opacity: 0, y: 12 }}

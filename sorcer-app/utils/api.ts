@@ -226,3 +226,30 @@ export function postAgentProject(body: ProjectRequest) {
     body: JSON.stringify(body),
   });
 }
+
+
+// ─── Agent: Execute Step ────────────────────────────────────────────────
+
+export interface ExecuteStepRequest {
+  prompt: string;
+  model_choice: string;
+  step_number: number;
+  title: string;
+}
+
+export interface ExecuteStepResponse {
+  step_number: number;
+  title: string;
+  model_used: string;
+  output: string;
+  elapsed_ms: number;
+  estimated_carbon_g: number;
+  executed_at: string;
+}
+
+export function postExecuteStep(body: ExecuteStepRequest) {
+  return apiFetch<ExecuteStepResponse>("/agent/execute-step", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
